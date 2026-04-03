@@ -13,9 +13,11 @@
     "dev:electron": "wait-on tcp:5173 tcp:3001 && cross-env ELECTRON_DISABLE_SANDBOX=1 VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "build": "prisma generate && vite build",
     "build:server": "tsc -p tsconfig.server.json && node -e \"require('fs').writeFileSync('dist-server/package.json', JSON.stringify({ type: 'commonjs' }))\"",
-    "build:db-template": "node scripts/build-db-template.mjs",
-    "pack:prepare": "prisma generate && vite build && npm run build:server && npm run build:db-template",
+    "pack:prepare": "prisma generate && vite build && npm run build:server",
     "dist:win": "npm run pack:prepare && electron-builder --win --publish never",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
     "start:prod": "cross-env NODE_ENV=production tsx src/server/index.ts",
     "preview": "concurrently -k \"npm run start:prod\" \"wait-on tcp:3001 && cross-env NODE_ENV=production ELECTRON_DISABLE_SANDBOX=1 electron .\"",
     "db:generate": "prisma generate",
@@ -30,13 +32,15 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@prisma/client": "^6.5.0",
+    "prisma": "^6.5.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "framer-motion": "^12.38.0",
     "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^1.7.0"
+    "lucide-react": "^1.7.0",
+    "tsx": "^4.19.3"
   },
   "build": {
     "appId": "com.ludra.gatonegro.pdv",
@@ -66,12 +70,6 @@
     ],
     "asar": true,
     "asarUnpack": ["node_modules/.prisma/**", "node_modules/@prisma/**"],
-    "extraResources": [
-      {
-        "from": "build/db-template.sqlite",
-        "to": "db-template.sqlite"
-      }
-    ],
     "win": {
       "target": ["nsis"],
       "artifactName": "${productName}-${version}-Setup.${ext}"
@@ -98,11 +96,9 @@
     "electron": "^35.0.0",
     "electron-builder": "^26.0.12",
     "postcss": "^8.5.8",
-    "prisma": "^6.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.2.2",
-    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vite": "^6.2.2",
     "wait-on": "^8.0.1"

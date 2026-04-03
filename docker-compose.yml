@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gatonegro
+      POSTGRES_PASSWORD: gatonegro
+      POSTGRES_DB: gatonegro
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Host 5433 evita conflito se já existir Postgres na 5432
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gatonegro -d gatonegro"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    environment:
+      DATABASE_URL: postgresql://gatonegro:gatonegro@db:5432/gatonegro?schema=public
+      JWT_SECRET: ${JWT_SECRET:-altere-esta-chave-em-producao}
+      API_PORT: "3001"
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

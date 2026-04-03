@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-server
+release
+.git
+.gitignore
+electron
+build
+*.db
+.env
+.env.*
+.env.local
+techspech.md
+*.md
+.DS_Store
