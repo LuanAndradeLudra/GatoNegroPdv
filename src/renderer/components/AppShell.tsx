@@ -5,13 +5,15 @@ import {
   LayoutDashboard,
   LineChart,
   LogOut,
+  Menu,
   Settings,
   ShoppingCart,
   Users,
   UsersRound,
   Wallet,
+  X,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { cn } from "../lib/cn";
 import type { UserAccess } from "../api";
 import { ThemeToggle } from "./ThemeToggle";
@@ -94,19 +96,69 @@ export function AppShell({
   brandSubtitle?: string;
 }) {
   const pageTitle = title ?? TITLES[view];
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileNavOpen) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const close = () => setMobileNavOpen(false);
+    mq.addEventListener("change", close);
+    return () => mq.removeEventListener("change", close);
+  }, []);
+
+  function navigateAndCloseMobile(v: ShellView) {
+    onNavigate(v);
+    setMobileNavOpen(false);
+  }
 
   return (
     <div className="flex h-screen min-h-0 w-full overflow-hidden bg-[#f4f6f9] text-slate-800 dark:bg-[#0c0c0f] dark:text-zinc-100">
-      {/* Sidebar — estilo painel web (AdminLTE-like) */}
-      <aside className="flex w-[260px] shrink-0 flex-col border-r border-slate-200/90 bg-white shadow-[2px_0_16px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+      {/* Overlay mobile: fecha ao tocar fora */}
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          aria-label="Fechar menu"
+          className="fixed inset-0 z-40 bg-slate-900/45 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
+
+      {/* Sidebar — drawer no mobile, coluna fixa no lg+ */}
+      <aside
+        className={cn(
+          "flex min-h-0 w-0 max-w-[320px] shrink-0 flex-col overflow-visible border-r border-slate-200/90 bg-white shadow-[2px_0_16px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none",
+          "fixed inset-y-0 left-0 z-50 w-[min(280px,88vw)] transform transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[260px] lg:max-w-none lg:translate-x-0",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        )}
+      >
         <div className="flex h-[57px] shrink-0 items-center gap-3 border-b border-slate-200/80 px-4 dark:border-zinc-800">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-900 ring-1 ring-slate-900/10 dark:bg-zinc-950 dark:ring-zinc-700">
             <img src="/logo.jpg" alt="" className="h-full w-full object-cover" width={40} height={40} />
           </div>
-          <div className="min-w-0 leading-tight">
+          <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">Gato Negro</p>
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-500">{brandSubtitle}</p>
           </div>
+          <button
+            type="button"
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 lg:hidden dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            aria-label="Fechar menu"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X className="h-5 w-5" strokeWidth={2} />
+          </button>
         </div>
 
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3 pt-4" aria-label="Módulos">
@@ -130,7 +182,7 @@ export function AppShell({
                 type="button"
                 disabled={disabled}
                 title={titleNav}
-                onClick={() => !disabled && onNavigate(item.id)}
+                onClick={() => !disabled && navigateAndCloseMobile(item.id)}
                 className={cn(
                   "group flex w-full items-center gap-3 rounded-md border-l-[3px] py-2.5 pl-3 pr-2 text-left text-[13px] font-medium transition-colors",
                   active && !disabled
@@ -165,10 +217,21 @@ export function AppShell({
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200/90 bg-white px-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Painel</p>
-            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{pageTitle}</h1>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200/90 bg-white px-4 shadow-sm sm:px-5 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button
+              type="button"
+              className="shrink-0 rounded-lg border border-slate-200 bg-white p-2 text-slate-700 shadow-sm transition-colors hover:bg-slate-50 lg:hidden dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              aria-label="Abrir menu"
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="h-5 w-5" strokeWidth={2} />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Painel</p>
+              <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{pageTitle}</h1>
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {headerRight}

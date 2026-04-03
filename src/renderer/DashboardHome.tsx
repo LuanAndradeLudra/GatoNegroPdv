@@ -86,7 +86,7 @@ export function DashboardHome({
   const labelMuted = "text-xs font-medium text-slate-500 dark:text-zinc-400";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-5 py-8">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200/90 pb-6 dark:border-zinc-800">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Sessão</p>

@@ -521,7 +521,7 @@ export function ErpStockScreen() {
     );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-5 py-8">
       <div className="border-b border-slate-200 pb-6 dark:border-zinc-800">
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">ERP</p>
         <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-zinc-50">Estoque</h2>

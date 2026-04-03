@@ -15,8 +15,15 @@ import {
 import { useAuth } from "./AuthContext";
 import { cn } from "./lib/cn";
 import { Button } from "./ui/Button";
+import { Card, CardContent } from "./ui/Card";
 import { Input } from "./ui/Input";
 import { Table, TBody, Td, Th, THead, Tr } from "./ui/Table";
+
+const fieldSelectClass = cn(
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "focus:border-slate-900 focus:ring-2 focus:ring-slate-950/10",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
 
 const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrador",
@@ -51,12 +58,17 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ROLE_BADGE: Record<UserRole, string> = {
-  ADMIN: "border-amber-500/30 bg-amber-500/15 text-amber-100",
-  GERENTE: "border-violet-500/30 bg-violet-500/15 text-violet-200",
-  VENDEDOR: "border-sky-500/30 bg-sky-500/15 text-sky-200",
-  ESTOQUE: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
-  COZINHA: "border-orange-500/30 bg-orange-500/15 text-orange-200",
-  CONFERENTE: "border-zinc-500/30 bg-zinc-500/15 text-zinc-300",
+  ADMIN:
+    "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-100",
+  GERENTE:
+    "border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-200",
+  VENDEDOR: "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200",
+  ESTOQUE:
+    "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200",
+  COZINHA:
+    "border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-200",
+  CONFERENTE:
+    "border-slate-200 bg-slate-100 text-slate-800 dark:border-zinc-500/30 dark:bg-zinc-500/15 dark:text-zinc-300",
 };
 
 type ModalMode = "create" | "edit" | null;
@@ -244,80 +256,95 @@ export function UsersScreen() {
   }
 
   return (
-    <div className="relative min-h-full px-4 pb-28 pt-2 sm:px-6">
-      <div className="mb-4 flex items-center justify-end">
+    <div className="relative mx-auto max-w-6xl space-y-8 px-5 py-8 pb-28 sm:pb-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-6 dark:border-zinc-800">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Administração</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-zinc-50">Usuários</h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-zinc-400">
+            Papéis, logins e permissões por módulo. Alterações em permissões valem no próximo acesso.
+          </p>
+        </div>
         <Button type="button" className="hidden sm:inline-flex" onClick={openCreate} disabled={!schema || busy}>
           Novo usuário
         </Button>
       </div>
 
-      {loadError ? <p className="mb-4 text-sm text-red-400">{loadError}</p> : null}
+      {loadError ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          {loadError}
+        </p>
+      ) : null}
 
-      <Table>
-        <THead>
-          <tr>
-            <Th>Nome</Th>
-            <Th>Login</Th>
-            <Th>Papel</Th>
-            <Th className="text-right">Ações</Th>
-          </tr>
-        </THead>
-        <TBody>
-          {users.map((u) => (
-            <Tr key={u.id}>
-              <Td className="max-w-[200px] truncate font-medium text-zinc-200">{u.name}</Td>
-              <Td className="font-mono text-xs text-zinc-400">{u.login}</Td>
-              <Td>
-                <RoleBadge role={u.role} />
-              </Td>
-              <Td className="text-right">
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-amber-400/90 hover:text-amber-300"
-                    onClick={() => openEdit(u)}
-                    disabled={busy}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-red-400/90 hover:text-red-300"
-                    onClick={() => void onDelete(u)}
-                    disabled={busy}
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </Td>
-            </Tr>
-          ))}
-        </TBody>
-      </Table>
+      <Card>
+        <CardContent className="!p-0">
+          <Table>
+            <THead>
+              <tr>
+                <Th>Nome</Th>
+                <Th>Login</Th>
+                <Th>Papel</Th>
+                <Th className="text-right">Ações</Th>
+              </tr>
+            </THead>
+            <TBody>
+              {users.map((u) => (
+                <Tr key={u.id}>
+                  <Td className="max-w-[200px] truncate font-medium text-slate-900 dark:text-zinc-100">{u.name}</Td>
+                  <Td className="font-mono text-xs text-slate-600 dark:text-zinc-400">{u.login}</Td>
+                  <Td>
+                    <RoleBadge role={u.role} />
+                  </Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-blue-700 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        onClick={() => openEdit(u)}
+                        disabled={busy}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        onClick={() => void onDelete(u)}
+                        disabled={busy}
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <button
         type="button"
         onClick={openCreate}
         disabled={!schema || busy}
         title="Novo usuário"
-        className="fixed bottom-8 right-8 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-600 text-zinc-950 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/40 transition hover:brightness-105 disabled:opacity-40 sm:hidden"
+        className="fixed bottom-6 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-b from-blue-600 to-blue-700 text-white shadow-lg shadow-slate-900/20 ring-1 ring-blue-500/30 transition hover:brightness-110 disabled:opacity-40 dark:from-amber-400 dark:to-amber-600 dark:text-zinc-950 dark:shadow-amber-950/40 dark:ring-amber-400/40 sm:hidden"
       >
         <UserPlus className="h-6 w-6" strokeWidth={2} />
       </button>
 
       {modal && formPerms && schema ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
           role="presentation"
           onClick={closeModal}
         >
           <div
-            className="my-8 w-full max-w-lg rounded-xl border border-white/[0.1] bg-[#1e1e1e]/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="my-8 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
             role="dialog"
             aria-modal
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-zinc-100">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">
               {modal === "create" ? "Novo usuário" : "Editar usuário"}
             </h2>
             <form className="mt-4 flex flex-col gap-3" onSubmit={(e) => void onSubmit(e)}>
@@ -339,10 +366,10 @@ export function UsersScreen() {
                 disabled={busy}
                 autoComplete="new-password"
               />
-              <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 Papel
                 <select
-                  className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
+                  className={fieldSelectClass}
                   value={formRole}
                   onChange={(e) => onRoleChange(e.target.value as UserRole)}
                   disabled={busy}
@@ -355,18 +382,23 @@ export function UsersScreen() {
                 </select>
               </label>
 
-              <fieldset className="mt-2 border-t border-white/[0.08] pt-4">
-                <legend className="text-sm font-semibold text-zinc-300">Permissões por módulo</legend>
-                <div className="mt-3 max-h-[40vh] space-y-4 overflow-y-auto pr-1">
+              <fieldset className="mt-2 border-t border-slate-200 pt-4 dark:border-zinc-700">
+                <legend className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Permissões por módulo</legend>
+                <div className="mt-3 max-h-[40vh] space-y-4 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/50 p-3 pr-1 dark:border-zinc-800 dark:bg-zinc-950/40">
                   {schema.modules.map((mod) => (
                     <div key={mod}>
-                      <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{MODULE_LABELS[mod]}</h4>
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-500">
+                        {MODULE_LABELS[mod]}
+                      </h4>
                       <div className="flex flex-col gap-2">
                         {schema.actions[mod].map((action) => (
-                          <label key={action} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-400">
+                          <label
+                            key={action}
+                            className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-zinc-300"
+                          >
                             <input
                               type="checkbox"
-                              className="rounded border-white/20 bg-zinc-900 text-amber-600"
+                              className="rounded border-slate-300 bg-white text-blue-600 focus:ring-blue-500/30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-amber-500 dark:focus:ring-amber-500/30"
                               checked={formPerms[mod].includes(action)}
                               onChange={() => toggleAction(mod, action)}
                               disabled={busy}
@@ -380,9 +412,11 @@ export function UsersScreen() {
                 </div>
               </fieldset>
 
-              {formError ? <p className="text-sm text-red-400">{formError}</p> : null}
+              {formError ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
+              ) : null}
 
-              <div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4">
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-zinc-700">
                 <Button type="button" variant="outline" onClick={closeModal} disabled={busy}>
                   Cancelar
                 </Button>

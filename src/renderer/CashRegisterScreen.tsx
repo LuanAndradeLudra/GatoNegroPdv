@@ -247,7 +247,7 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
   const labelUpper = "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+    <div className="mx-auto max-w-7xl space-y-8 px-5 py-8">
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
           {error}
