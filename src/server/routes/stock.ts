@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Prisma, StockMovementKind } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { notifyStockChanged } from "../lib/stockBroadcast.js";
 import {
   attachStockAccess,
   requireStockListAccess,
@@ -20,18 +21,41 @@ const productSelectErp = {
   name: true,
   price: true,
   stock: true,
+  minStock: true,
+  averageCost: true,
   isKitchenItem: true,
   controlsStock: true,
   active: true,
   createdAt: true,
   updatedAt: true,
+  category: { select: { id: true, name: true } },
 } as const;
+
+type ProductErpRow = Prisma.ProductGetPayload<{ select: typeof productSelectErp }>;
+
+function serializeProduct(p: ProductErpRow) {
+  return {
+    id: p.id,
+    name: p.name,
+    price: p.price,
+    stock: p.stock,
+    minStock: p.minStock,
+    averageCost: p.averageCost,
+    isKitchenItem: p.isKitchenItem,
+    controlsStock: p.controlsStock,
+    active: p.active,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+    category: p.category ? { id: p.category.id, name: p.category.name } : null,
+  };
+}
 
 function serializeMovement(m: {
   id: string;
   kind: StockMovementKind;
   balanceBefore: number;
   balanceAfter: number;
+  unitCost: number | null;
   note: string | null;
   createdAt: Date;
   product: { id: string; name: string };
@@ -43,6 +67,7 @@ function serializeMovement(m: {
     balanceBefore: m.balanceBefore,
     balanceAfter: m.balanceAfter,
     delta: round2(m.balanceAfter - m.balanceBefore),
+    unitCost: m.unitCost,
     note: m.note,
     createdAt: m.createdAt.toISOString(),
     product: m.product,
@@ -50,12 +75,96 @@ function serializeMovement(m: {
   };
 }
 
+stockRouter.get("/categories", requireStockListAccess, async (_req, res) => {
+  const rows = await prisma.productCategory.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  res.json({
+    categories: rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      sortOrder: c.sortOrder,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+    })),
+  });
+});
+
+stockRouter.post("/categories", requireStockProdutos, async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  if (!name || name.length > 120) {
+    res.status(400).json({ error: "Informe um nome válido." });
+    return;
+  }
+  const sortOrder =
+    typeof req.body?.sortOrder === "number" && Number.isFinite(req.body.sortOrder)
+      ? Math.round(req.body.sortOrder)
+      : 0;
+  const created = await prisma.productCategory.create({
+    data: { name, sortOrder },
+  });
+  res.status(201).json({
+    category: {
+      id: created.id,
+      name: created.name,
+      sortOrder: created.sortOrder,
+      createdAt: created.createdAt.toISOString(),
+      updatedAt: created.updatedAt.toISOString(),
+    },
+  });
+});
+
+stockRouter.patch("/categories/:id", requireStockProdutos, async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.productCategory.findUnique({ where: { id } });
+  if (!existing) {
+    res.status(404).json({ error: "Categoria não encontrada." });
+    return;
+  }
+  const data: Prisma.ProductCategoryUpdateInput = {};
+  if (typeof req.body?.name === "string") {
+    const n = req.body.name.trim();
+    if (n) {
+      data.name = n;
+    }
+  }
+  if (req.body?.sortOrder !== undefined && typeof req.body.sortOrder === "number") {
+    data.sortOrder = Math.round(req.body.sortOrder);
+  }
+  if (Object.keys(data).length === 0) {
+    res.status(400).json({ error: "Nada para atualizar." });
+    return;
+  }
+  const updated = await prisma.productCategory.update({ where: { id }, data });
+  res.json({
+    category: {
+      id: updated.id,
+      name: updated.name,
+      sortOrder: updated.sortOrder,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    },
+  });
+});
+
+stockRouter.delete("/categories/:id", requireStockProdutos, async (req, res) => {
+  const id = req.params.id;
+  const existing = await prisma.productCategory.findUnique({ where: { id } });
+  if (!existing) {
+    res.status(404).json({ error: "Categoria não encontrada." });
+    return;
+  }
+  await prisma.product.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+  await prisma.productCategory.delete({ where: { id } });
+  res.status(204).send();
+});
+
 stockRouter.get("/products", requireStockListAccess, async (_req, res) => {
   const rows = await prisma.product.findMany({
     orderBy: { name: "asc" },
     select: productSelectErp,
   });
-  res.json({ products: rows });
+  res.json({ products: rows.map(serializeProduct) });
 });
 
 stockRouter.post("/products", requireStockProdutos, async (req, res) => {
@@ -72,12 +181,35 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
         ? Number.parseFloat(initialRaw.replace(",", "."))
         : 0;
 
+  const minRaw = req.body?.minStock;
+  const minStock =
+    typeof minRaw === "number"
+      ? minRaw
+      : typeof minRaw === "string"
+        ? Number.parseFloat(minRaw.replace(",", "."))
+        : 0;
+
+  const catRaw = req.body?.categoryId;
+  let categoryId: string | null = null;
+  if (typeof catRaw === "string" && catRaw.trim()) {
+    const c = await prisma.productCategory.findUnique({ where: { id: catRaw.trim() } });
+    if (!c) {
+      res.status(400).json({ error: "Categoria não encontrada." });
+      return;
+    }
+    categoryId = c.id;
+  }
+
   if (!name || !Number.isFinite(price) || price < 0) {
     res.status(400).json({ error: "Nome e preço válidos são obrigatórios." });
     return;
   }
   if (!Number.isFinite(initialStock) || initialStock < 0) {
     res.status(400).json({ error: "Estoque inicial inválido." });
+    return;
+  }
+  if (!Number.isFinite(minStock) || minStock < 0) {
+    res.status(400).json({ error: "Estoque mínimo inválido." });
     return;
   }
 
@@ -90,9 +222,11 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
         name,
         price: round2(price),
         stock: controlsStock ? initial : 0,
+        minStock: round2(minStock),
         isKitchenItem,
         controlsStock,
         active,
+        categoryId,
       },
       select: productSelectErp,
     });
@@ -113,7 +247,8 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
     return p;
   });
 
-  res.status(201).json({ product: created });
+  notifyStockChanged();
+  res.status(201).json({ product: serializeProduct(created) });
 });
 
 stockRouter.patch("/products/:id", requireStockProdutos, async (req, res) => {
@@ -140,6 +275,33 @@ stockRouter.patch("/products/:id", requireStockProdutos, async (req, res) => {
     }
     data.price = round2(price);
   }
+  if (req.body?.minStock !== undefined) {
+    const minRaw = req.body.minStock;
+    const minStock =
+      typeof minRaw === "number"
+        ? minRaw
+        : typeof minRaw === "string"
+          ? Number.parseFloat(String(minRaw).replace(",", "."))
+          : NaN;
+    if (!Number.isFinite(minStock) || minStock < 0) {
+      res.status(400).json({ error: "Estoque mínimo inválido." });
+      return;
+    }
+    data.minStock = round2(minStock);
+  }
+  if (req.body?.categoryId !== undefined) {
+    const catRaw = req.body.categoryId;
+    if (catRaw === null || catRaw === "") {
+      data.category = { disconnect: true };
+    } else if (typeof catRaw === "string") {
+      const c = await prisma.productCategory.findUnique({ where: { id: catRaw.trim() } });
+      if (!c) {
+        res.status(400).json({ error: "Categoria não encontrada." });
+        return;
+      }
+      data.category = { connect: { id: c.id } };
+    }
+  }
   if (req.body?.isKitchenItem !== undefined) {
     data.isKitchenItem = Boolean(req.body.isKitchenItem);
   }
@@ -160,7 +322,8 @@ stockRouter.patch("/products/:id", requireStockProdutos, async (req, res) => {
     data,
     select: productSelectErp,
   });
-  res.json({ product: updated });
+  notifyStockChanged();
+  res.json({ product: serializeProduct(updated) });
 });
 
 stockRouter.delete("/products/:id", requireStockProdutos, async (req, res) => {
@@ -180,16 +343,26 @@ stockRouter.delete("/products/:id", requireStockProdutos, async (req, res) => {
   }
 
   await prisma.product.delete({ where: { id } });
+  notifyStockChanged();
   res.status(204).send();
 });
 
 stockRouter.get("/movements", requireStockListAccess, async (req, res) => {
   const productId = typeof req.query.productId === "string" ? req.query.productId.trim() : "";
+  const kindQ = typeof req.query.kind === "string" ? req.query.kind.trim().toUpperCase() : "";
   const takeRaw = req.query.take;
   const take = Math.min(200, Math.max(1, Number(takeRaw) || 80));
 
+  const where: Prisma.StockMovementWhereInput = {};
+  if (productId) {
+    where.productId = productId;
+  }
+  if (kindQ === "ENTRADA" || kindQ === "SAIDA" || kindQ === "AJUSTE") {
+    where.kind = kindQ as StockMovementKind;
+  }
+
   const rows = await prisma.stockMovement.findMany({
-    where: productId ? { productId } : undefined,
+    where,
     orderBy: { createdAt: "desc" },
     take,
     include: {
@@ -199,6 +372,82 @@ stockRouter.get("/movements", requireStockListAccess, async (req, res) => {
   });
 
   res.json({ movements: rows.map(serializeMovement) });
+});
+
+stockRouter.post("/inventory-close", attachStockAccess, async (req, res) => {
+  if (!req.stockAccess!.ajuste) {
+    res.status(403).json({ error: "Sem permissão para inventário (ajuste)." });
+    return;
+  }
+  const raw = req.body?.counts;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    res.status(400).json({ error: "Informe counts: [{ productId, counted }]." });
+    return;
+  }
+
+  const lines: { productId: string; counted: number }[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") {
+      continue;
+    }
+    const productId = typeof (row as { productId?: string }).productId === "string" ? (row as { productId: string }).productId.trim() : "";
+    const countedRaw = (row as { counted?: unknown }).counted;
+    const counted =
+      typeof countedRaw === "number"
+        ? countedRaw
+        : typeof countedRaw === "string"
+          ? Number.parseFloat(countedRaw.replace(",", "."))
+          : NaN;
+    if (!productId || !Number.isFinite(counted) || counted < 0) {
+      res.status(400).json({ error: "Cada linha precisa de productId e counted (≥ 0)." });
+      return;
+    }
+    lines.push({ productId, counted: round2(counted) });
+  }
+
+  const userId = req.user!.sub;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const line of lines) {
+        const product = await tx.product.findUnique({ where: { id: line.productId } });
+        if (!product) {
+          throw new Error(`NOT_FOUND:${line.productId}`);
+        }
+        if (!product.controlsStock) {
+          continue;
+        }
+        const before = round2(product.stock);
+        const after = line.counted;
+        if (Math.abs(after - before) < 0.0001) {
+          continue;
+        }
+        await tx.product.update({
+          where: { id: line.productId },
+          data: { stock: after },
+        });
+        await tx.stockMovement.create({
+          data: {
+            productId: line.productId,
+            kind: "AJUSTE",
+            balanceBefore: before,
+            balanceAfter: after,
+            note: "Inventário de fechamento",
+            createdById: userId,
+          },
+        });
+      }
+    });
+    notifyStockChanged();
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.startsWith("NOT_FOUND:")) {
+      res.status(404).json({ error: "Produto não encontrado." });
+      return;
+    }
+    throw e;
+  }
 });
 
 stockRouter.post("/movements", attachStockAccess, async (req, res) => {
@@ -244,6 +493,22 @@ stockRouter.post("/movements", attachStockAccess, async (req, res) => {
         ? Number.parseFloat(newStockRaw.replace(",", "."))
         : NaN;
 
+  const unitCostRaw = req.body?.unitCost;
+  let unitCost: number | undefined;
+  if (unitCostRaw !== undefined && unitCostRaw !== null && unitCostRaw !== "") {
+    const u =
+      typeof unitCostRaw === "number"
+        ? unitCostRaw
+        : typeof unitCostRaw === "string"
+          ? Number.parseFloat(unitCostRaw.replace(",", "."))
+          : NaN;
+    if (!Number.isFinite(u) || u < 0) {
+      res.status(400).json({ error: "Preço de custo unitário inválido." });
+      return;
+    }
+    unitCost = round2(u);
+  }
+
   const userId = req.user!.sub;
 
   try {
@@ -258,12 +523,23 @@ stockRouter.post("/movements", attachStockAccess, async (req, res) => {
 
       const before = round2(product.stock);
       let after: number;
+      let avgUpdate: number | undefined;
 
       if (kind === "ENTRADA") {
         if (!Number.isFinite(quantity) || quantity <= 0) {
           throw new Error("BAD_QTY");
         }
-        after = round2(before + round2(quantity));
+        const q = round2(quantity);
+        after = round2(before + q);
+        if (unitCost !== undefined) {
+          if (before <= 0.0001) {
+            avgUpdate = unitCost;
+          } else if (product.averageCost != null) {
+            avgUpdate = round2((before * product.averageCost + q * unitCost) / after);
+          } else {
+            avgUpdate = unitCost;
+          }
+        }
       } else if (kind === "SAIDA") {
         if (!Number.isFinite(quantity) || quantity <= 0) {
           throw new Error("BAD_QTY");
@@ -281,7 +557,10 @@ stockRouter.post("/movements", attachStockAccess, async (req, res) => {
 
       await tx.product.update({
         where: { id: productId },
-        data: { stock: after },
+        data: {
+          stock: after,
+          ...(avgUpdate !== undefined ? { averageCost: avgUpdate } : {}),
+        },
       });
 
       const row = await tx.stockMovement.create({
@@ -290,6 +569,7 @@ stockRouter.post("/movements", attachStockAccess, async (req, res) => {
           kind,
           balanceBefore: before,
           balanceAfter: after,
+          unitCost: kind === "ENTRADA" && unitCost !== undefined ? unitCost : null,
           note,
           createdById: userId,
         },
@@ -302,6 +582,7 @@ stockRouter.post("/movements", attachStockAccess, async (req, res) => {
       return row;
     });
 
+    notifyStockChanged();
     res.status(201).json({ movement: serializeMovement(movement) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";

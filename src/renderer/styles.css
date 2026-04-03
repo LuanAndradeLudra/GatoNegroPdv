@@ -17,3 +17,27 @@ body {
   color: #e4e4e7;
   -webkit-font-smoothing: antialiased;
 }
+
+@keyframes gn-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(-7px);
+  }
+  36% {
+    transform: translateX(7px);
+  }
+  54% {
+    transform: translateX(-5px);
+  }
+  72% {
+    transform: translateX(5px);
+  }
+}
+
+.gn-shake {
+  animation: gn-shake 0.42s ease-out;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.45);
+}

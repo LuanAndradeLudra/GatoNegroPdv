@@ -1,6 +1,8 @@
 node_modules
 dist
 dist-electron
+dist-server
+release
 *.db
 *.db-journal
 .env

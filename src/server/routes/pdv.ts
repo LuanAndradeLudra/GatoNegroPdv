@@ -1,10 +1,53 @@
 import { Router } from "express";
 import type { OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware, verifyJwtToPayload } from "../middleware/auth.js";
 import { requireOpenCashRegister, requirePdvAccess } from "../middleware/pdvAccess.js";
+import { canOpenPdv, resolvePermissions } from "../lib/permissions.js";
+import { notifyStockChanged, registerStockSseClient } from "../lib/stockBroadcast.js";
 
 export const pdvRouter = Router();
+
+/** SSE: token em `Authorization: Bearer` ou `?token=` (EventSource). */
+pdvRouter.get("/stock-stream", async (req, res) => {
+  const header = req.headers.authorization;
+  const token =
+    header?.startsWith("Bearer ") ? header.slice(7) : typeof req.query.token === "string" ? req.query.token : null;
+  const payload = token ? verifyJwtToPayload(token) : null;
+  if (!payload) {
+    res.status(401).end();
+    return;
+  }
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) {
+    res.status(401).end();
+    return;
+  }
+  const map = resolvePermissions(user);
+  if (!canOpenPdv(user.role, map)) {
+    res.status(403).end();
+    return;
+  }
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  (res as { flushHeaders?: () => void }).flushHeaders?.();
+  const unsub = registerStockSseClient(res);
+  res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+  const ping = setInterval(() => {
+    try {
+      res.write(`: ping\n\n`);
+    } catch {
+      clearInterval(ping);
+      unsub();
+    }
+  }, 25000);
+  req.on("close", () => {
+    clearInterval(ping);
+    unsub();
+  });
+});
 
 pdvRouter.use(authMiddleware);
 pdvRouter.use(requirePdvAccess);
@@ -14,6 +57,7 @@ const productSelect = {
   name: true,
   price: true,
   stock: true,
+  minStock: true,
   isKitchenItem: true,
   controlsStock: true,
   active: true,
@@ -280,11 +324,51 @@ async function incrementStockTx(tx: Prisma.TransactionClient, orderId: string): 
   const items = await tx.orderItem.findMany({
     where: { orderId },
     include: {
-      product: { select: { id: true, controlsStock: true, stock: true } },
+      product: { select: { id: true, name: true, controlsStock: true, stock: true } },
     },
   });
   for (const it of items) {
     if (!it.product.controlsStock) {
+      continue;
+    }
+    const next = round2(it.product.stock + it.quantity);
+    await tx.product.update({
+      where: { id: it.productId },
+      data: { stock: next },
+    });
+  }
+}
+
+/** Estorno de venda fechada: devolve estoque, exceto itens de cozinha marcados como desperdício. */
+async function incrementStockForCancel(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  userId: string,
+  kitchenRestore: Record<string, "return" | "waste"> | undefined,
+): Promise<void> {
+  const items = await tx.orderItem.findMany({
+    where: { orderId },
+    include: {
+      product: { select: { id: true, name: true, controlsStock: true, stock: true, isKitchenItem: true } },
+    },
+  });
+  for (const it of items) {
+    if (!it.product.controlsStock) {
+      continue;
+    }
+    const waste = it.product.isKitchenItem && kitchenRestore?.[it.id] === "waste";
+    if (waste) {
+      const stock = round2(it.product.stock);
+      await tx.stockMovement.create({
+        data: {
+          productId: it.productId,
+          kind: "SAIDA",
+          balanceBefore: stock,
+          balanceAfter: stock,
+          note: `Perda (estorno) — ${it.quantity} un. de "${it.product.name}" não retornadas ao estoque`,
+          createdById: userId,
+        },
+      });
       continue;
     }
     const next = round2(it.product.stock + it.quantity);
@@ -564,6 +648,7 @@ pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) =>
       res.status(500).json({ error: "Erro ao recarregar pedido." });
       return;
     }
+    notifyStockChanged();
     res.status(200).json({ order: await serializeOrder(full) });
     return;
   }
@@ -596,6 +681,7 @@ pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) =>
     res.status(500).json({ error: "Erro ao recarregar pedido." });
     return;
   }
+  notifyStockChanged();
   res.status(201).json({ order: await serializeOrder(full) });
 });
 
@@ -645,6 +731,7 @@ pdvRouter.patch("/orders/:orderId/items/:itemId", requireOpenCashRegister, async
     where: { id: orderId },
     include: orderInclude,
   });
+  notifyStockChanged();
   res.json({ order: full ? await serializeOrder(full) : null });
 });
 
@@ -672,6 +759,7 @@ pdvRouter.delete("/orders/:orderId/items/:itemId", requireOpenCashRegister, asyn
     where: { id: orderId },
     include: orderInclude,
   });
+  notifyStockChanged();
   res.json({ order: full ? await serializeOrder(full) : null });
 });
 
@@ -728,6 +816,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
         include: orderIncludeWithPayments,
       });
     });
+    notifyStockChanged();
     res.json({ order: await serializeOrder(closed) });
     return;
   }
@@ -829,6 +918,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
         include: orderIncludeWithPayments,
       });
     });
+    notifyStockChanged();
     res.json({ order: await serializeOrder(closed) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao fechar pedido.";
@@ -868,6 +958,7 @@ pdvRouter.post("/orders/:id/reopen", requireOpenCashRegister, async (req, res) =
         include: orderInclude,
       });
     });
+    notifyStockChanged();
     res.json({ order: await serializeOrder(updated) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao reabrir.";
@@ -909,11 +1000,21 @@ pdvRouter.post("/orders/:id/cancel", requireOpenCashRegister, async (req, res) =
   }
 
   if (order.status === "CLOSED") {
+    const rawKr = req.body?.kitchenItemRestore;
+    let kitchenRestore: Record<string, "return" | "waste"> | undefined;
+    if (rawKr && typeof rawKr === "object" && !Array.isArray(rawKr)) {
+      kitchenRestore = {};
+      for (const [k, v] of Object.entries(rawKr)) {
+        if (v === "waste" || v === "return") {
+          kitchenRestore[k] = v;
+        }
+      }
+    }
     try {
       const updated = await prisma.$transaction(async (tx) => {
         await tx.orderPayment.deleteMany({ where: { orderId } });
         if (restoreStock) {
-          await incrementStockTx(tx, orderId);
+          await incrementStockForCancel(tx, orderId, req.user!.sub, kitchenRestore);
         }
         return tx.order.update({
           where: { id: orderId },
@@ -924,6 +1025,7 @@ pdvRouter.post("/orders/:id/cancel", requireOpenCashRegister, async (req, res) =
           include: orderIncludeWithPayments,
         });
       });
+      notifyStockChanged();
       res.json({ order: await serializeOrder(updated) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao cancelar.";

@@ -287,6 +287,8 @@ export type PdvProduct = {
   name: string;
   price: number;
   stock: number;
+  /** Alerta de reposição no ERP; no PDV usado para cor do chip. */
+  minStock: number;
   isKitchenItem: boolean;
   controlsStock: boolean;
   active: boolean;
@@ -402,6 +404,11 @@ export async function apiPdvProducts(token: string, orderId?: string | null): Pr
   const res = await fetch(`/api/pdv/products${qs}`, { headers: authHeaders(token) });
   const data = await parseJson<{ products: PdvProduct[] }>(res);
   return data.products;
+}
+
+/** URL relativa para EventSource (SSE) — estoque / reservas atualizados em tempo real. */
+export function pdvStockStreamUrl(token: string): string {
+  return `/api/pdv/stock-stream?token=${encodeURIComponent(token)}`;
 }
 
 export type PdvTodayStats = {
@@ -561,11 +568,19 @@ export async function apiPdvReopenOrder(token: string, orderId: string): Promise
   return data.order;
 }
 
-export async function apiPdvCancelOrder(token: string, orderId: string, restoreStock: boolean): Promise<PdvOrder> {
+export async function apiPdvCancelOrder(
+  token: string,
+  orderId: string,
+  body: {
+    restoreStock: boolean;
+    /** Itens de cozinha no estorno: desperdício não devolve saldo físico. */
+    kitchenItemRestore?: Record<string, "return" | "waste">;
+  },
+): Promise<PdvOrder> {
   const res = await fetch(`/api/pdv/orders/${orderId}/cancel`, {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ restoreStock }),
+    body: JSON.stringify(body),
   });
   const data = await parseJson<{ order: PdvOrder }>(res);
   return data.order;
@@ -707,9 +722,20 @@ export type ErpProductRow = {
   name: string;
   price: number;
   stock: number;
+  minStock: number;
+  averageCost: number | null;
   isKitchenItem: boolean;
   controlsStock: boolean;
   active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  category: { id: string; name: string } | null;
+};
+
+export type ProductCategoryRow = {
+  id: string;
+  name: string;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -720,6 +746,7 @@ export type StockMovementRow = {
   balanceBefore: number;
   balanceAfter: number;
   delta: number;
+  unitCost: number | null;
   note: string | null;
   createdAt: string;
   product: { id: string; name: string };
@@ -732,6 +759,51 @@ export async function apiStockProducts(token: string): Promise<ErpProductRow[]> 
   return data.products;
 }
 
+export async function apiStockCategories(token: string): Promise<ProductCategoryRow[]> {
+  const res = await fetch("/api/stock/categories", { headers: authHeaders(token) });
+  const data = await parseJson<{ categories: ProductCategoryRow[] }>(res);
+  return data.categories;
+}
+
+export async function apiStockCreateCategory(
+  token: string,
+  body: { name: string; sortOrder?: number },
+): Promise<ProductCategoryRow> {
+  const res = await fetch("/api/stock/categories", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ category: ProductCategoryRow }>(res);
+  return data.category;
+}
+
+export async function apiStockPatchCategory(
+  token: string,
+  id: string,
+  body: Partial<{ name: string; sortOrder: number }>,
+): Promise<ProductCategoryRow> {
+  const res = await fetch(`/api/stock/categories/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ category: ProductCategoryRow }>(res);
+  return data.category;
+}
+
+export async function apiStockDeleteCategory(token: string, id: string): Promise<void> {
+  const res = await fetch(`/api/stock/categories/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 204) {
+    return;
+  }
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  throw new Error(data.error ?? `Erro HTTP ${res.status}`);
+}
+
 export async function apiStockCreateProduct(
   token: string,
   body: {
@@ -741,6 +813,8 @@ export async function apiStockCreateProduct(
     controlsStock?: boolean;
     active?: boolean;
     initialStock?: number;
+    minStock?: number;
+    categoryId?: string | null;
   },
 ): Promise<ErpProductRow> {
   const res = await fetch("/api/stock/products", {
@@ -758,6 +832,8 @@ export async function apiStockPatchProduct(
   body: Partial<{
     name: string;
     price: number;
+    minStock: number;
+    categoryId: string | null;
     isKitchenItem: boolean;
     controlsStock: boolean;
     active: boolean;
@@ -798,11 +874,14 @@ export async function apiStockDeleteProduct(token: string, id: string): Promise<
 
 export async function apiStockMovements(
   token: string,
-  q?: { productId?: string; take?: number },
+  q?: { productId?: string; kind?: "ENTRADA" | "SAIDA" | "AJUSTE"; take?: number },
 ): Promise<StockMovementRow[]> {
   const params = new URLSearchParams();
   if (q?.productId) {
     params.set("productId", q.productId);
+  }
+  if (q?.kind) {
+    params.set("kind", q.kind);
   }
   if (q?.take != null) {
     params.set("take", String(q.take));
@@ -813,6 +892,18 @@ export async function apiStockMovements(
   return data.movements;
 }
 
+export async function apiStockInventoryClose(
+  token: string,
+  counts: { productId: string; counted: number }[],
+): Promise<void> {
+  const res = await fetch("/api/stock/inventory-close", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ counts }),
+  });
+  await parseJson<{ ok: boolean }>(res);
+}
+
 export async function apiStockCreateMovement(
   token: string,
   body: {
@@ -821,6 +912,8 @@ export async function apiStockCreateMovement(
     quantity?: number;
     newStock?: number;
     note?: string | null;
+    /** Só ENTRADA; atualiza custo médio ponderado. */
+    unitCost?: number | null;
   },
 ): Promise<StockMovementRow> {
   const res = await fetch("/api/stock/movements", {

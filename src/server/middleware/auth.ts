@@ -16,6 +16,16 @@ export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: "7d" });
 }
 
+/** Para SSE / links com token na query. */
+export function verifyJwtToPayload(token: string): JwtPayload | null {
+  try {
+    const decoded = jwt.verify(token, getJwtSecret()) as jwt.JwtPayload;
+    return parseJwtPayload(decoded);
+  } catch {
+    return null;
+  }
+}
+
 function parseJwtPayload(decoded: jwt.JwtPayload): JwtPayload | null {
   const sub = decoded.sub;
   const login = (decoded as Record<string, unknown>).login;

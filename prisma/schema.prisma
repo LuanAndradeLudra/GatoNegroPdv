@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows"]
 }
 
 datasource db {
@@ -53,11 +54,26 @@ enum StockMovementKind {
   AJUSTE
 }
 
+model ProductCategory {
+  id        String    @id @default(cuid())
+  name      String
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
 model Product {
   id            String      @id @default(cuid())
   name          String
   price         Float
   stock         Float       @default(0)
+  /// Alerta no ERP / PDV quando saldo ≤ este valor.
+  minStock      Float       @default(0)
+  /// Custo médio ponderado (atualizado em entradas com preço de custo).
+  averageCost   Float?
+  categoryId    String?
+  category      ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   isKitchenItem Boolean     @default(false)
   controlsStock Boolean     @default(true)
   active        Boolean     @default(true)
@@ -74,6 +90,8 @@ model StockMovement {
   kind          StockMovementKind
   balanceBefore Float
   balanceAfter  Float
+  /// Preço unitário de custo nesta entrada (opcional).
+  unitCost      Float?
   note          String?
   createdById   String
   createdBy     User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])

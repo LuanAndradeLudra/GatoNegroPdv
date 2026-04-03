@@ -1,12 +1,18 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  apiStockCategories,
+  apiStockCreateCategory,
   apiStockCreateMovement,
   apiStockCreateProduct,
+  apiStockDeleteCategory,
   apiStockDeleteProduct,
+  apiStockInventoryClose,
   apiStockMovements,
+  apiStockPatchCategory,
   apiStockPatchProduct,
   apiStockProducts,
   type ErpProductRow,
+  type ProductCategoryRow,
   type StockMovementRow,
 } from "./api";
 import { useAuth } from "./AuthContext";
@@ -23,7 +29,23 @@ function hasAnyStockAccess(s: { produtos: boolean; entrada: boolean; saida: bool
   return s.produtos || s.entrada || s.saida || s.ajuste;
 }
 
-type Tab = "produtos" | "movimentos";
+type Tab = "produtos" | "categorias" | "movimentos" | "inventario";
+
+function stockBalanceClass(p: ErpProductRow): string {
+  if (!p.controlsStock) {
+    return "tabular-nums text-zinc-300";
+  }
+  if (p.stock <= p.minStock) {
+    return "tabular-nums font-medium text-red-400";
+  }
+  if (p.minStock > 0 && p.stock <= p.minStock + 2) {
+    return "tabular-nums font-medium text-orange-400/95";
+  }
+  if (p.minStock <= 0 && p.stock < 5) {
+    return "tabular-nums font-medium text-orange-400/95";
+  }
+  return "tabular-nums text-zinc-300";
+}
 
 export function ErpStockScreen() {
   const { state } = useAuth();
@@ -40,6 +62,15 @@ export function ErpStockScreen() {
   const [busy, setBusy] = useState(false);
 
   const [historyFilter, setHistoryFilter] = useState("");
+  const [movementKindFilter, setMovementKindFilter] = useState<"" | "ENTRADA" | "SAIDA" | "AJUSTE">("");
+
+  const [categories, setCategories] = useState<ProductCategoryRow[]>([]);
+  const [catName, setCatName] = useState("");
+  const [catSort, setCatSort] = useState("0");
+  const [catEditing, setCatEditing] = useState<ProductCategoryRow | null>(null);
+
+  const [invCounts, setInvCounts] = useState<Record<string, string>>({});
+  const [invErr, setInvErr] = useState<string | null>(null);
 
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<ErpProductRow | null>(null);
@@ -49,6 +80,8 @@ export function ErpStockScreen() {
   const [formControls, setFormControls] = useState(true);
   const [formActive, setFormActive] = useState(true);
   const [formInitialStock, setFormInitialStock] = useState("");
+  const [formMinStock, setFormMinStock] = useState("0");
+  const [formCategoryId, setFormCategoryId] = useState("");
   const [formErr, setFormErr] = useState<string | null>(null);
 
   const [movProductId, setMovProductId] = useState("");
@@ -59,6 +92,7 @@ export function ErpStockScreen() {
   const [movQty, setMovQty] = useState("");
   const [movNewStock, setMovNewStock] = useState("");
   const [movNote, setMovNote] = useState("");
+  const [movUnitCostDigits, setMovUnitCostDigits] = useState("");
   const [movErr, setMovErr] = useState<string | null>(null);
 
   const canProducts = stock?.produtos ?? false;
@@ -75,13 +109,24 @@ export function ErpStockScreen() {
     setProducts(list);
   }, [token]);
 
+  const loadCategories = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+    const list = await apiStockCategories(token);
+    setCategories(list);
+  }, [token]);
+
   const loadMovements = useCallback(async () => {
     if (!token) {
       return;
     }
-    const list = await apiStockMovements(token, { take: 200 });
+    const list = await apiStockMovements(token, {
+      take: 200,
+      ...(movementKindFilter ? { kind: movementKindFilter } : {}),
+    });
     setMovements(list);
-  }, [token]);
+  }, [token, movementKindFilter]);
 
   const refresh = useCallback(async () => {
     if (!token || !stock || !hasAnyStockAccess(stock)) {
@@ -89,11 +134,15 @@ export function ErpStockScreen() {
     }
     setLoadErr(null);
     try {
-      await Promise.all([loadProducts(), loadMovements()]);
+      const tasks: Promise<void>[] = [loadProducts(), loadMovements()];
+      if (canProducts) {
+        tasks.push(loadCategories());
+      }
+      await Promise.all(tasks);
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : "Erro ao carregar");
     }
-  }, [token, stock, loadProducts, loadMovements]);
+  }, [token, stock, loadProducts, loadMovements, loadCategories, canProducts]);
 
   useEffect(() => {
     void refresh();
@@ -112,7 +161,31 @@ export function ErpStockScreen() {
     if (tab === "movimentos" && !canMove && canProducts) {
       setTab("produtos");
     }
-  }, [stock, tab, canProducts, canMove]);
+    if (tab === "categorias" && !canProducts && canMove) {
+      setTab("movimentos");
+    }
+    if (tab === "inventario" && !canAjuste) {
+      setTab(canMove ? "movimentos" : "produtos");
+    }
+  }, [stock, tab, canProducts, canMove, canAjuste]);
+
+  useEffect(() => {
+    if (tab !== "inventario") {
+      return;
+    }
+    setInvCounts((prev) => {
+      const next = { ...prev };
+      for (const p of products) {
+        if (!p.controlsStock) {
+          continue;
+        }
+        if (next[p.id] === undefined) {
+          next[p.id] = String(p.stock);
+        }
+      }
+      return next;
+    });
+  }, [tab, products]);
 
   const productOptions = useMemo(() => products.filter((p) => p.controlsStock), [products]);
 
@@ -170,6 +243,8 @@ export function ErpStockScreen() {
     setFormControls(true);
     setFormActive(true);
     setFormInitialStock("0");
+    setFormMinStock("0");
+    setFormCategoryId("");
     setFormErr(null);
   }
 
@@ -181,6 +256,8 @@ export function ErpStockScreen() {
     setFormKitchen(p.isKitchenItem);
     setFormControls(p.controlsStock);
     setFormActive(p.active);
+    setFormMinStock(String(p.minStock));
+    setFormCategoryId(p.category?.id ?? "");
     setFormErr(null);
   }
 
@@ -221,6 +298,7 @@ export function ErpStockScreen() {
         setFormErr("Informe um preço válido.");
         return;
       }
+      const minS = Number.parseFloat(formMinStock.replace(",", ".")) || 0;
       if (modal === "create") {
         const initial = Number.parseFloat(formInitialStock.replace(",", ".")) || 0;
         await apiStockCreateProduct(token, {
@@ -230,6 +308,8 @@ export function ErpStockScreen() {
           controlsStock: formControls,
           active: formActive,
           initialStock: initial,
+          minStock: minS,
+          categoryId: formCategoryId || null,
         });
       } else if (editing) {
         await apiStockPatchProduct(token, editing.id, {
@@ -238,6 +318,8 @@ export function ErpStockScreen() {
           isKitchenItem: formKitchen,
           controlsStock: formControls,
           active: formActive,
+          minStock: minS,
+          categoryId: formCategoryId || null,
         });
       }
       closeModal();
@@ -268,15 +350,110 @@ export function ErpStockScreen() {
       } else {
         body.quantity = Number.parseFloat(movQty.replace(",", "."));
       }
+      if (movKind === "ENTRADA" && movUnitCostDigits.trim()) {
+        const u = parseDigitsToReais(movUnitCostDigits);
+        if (u != null && u >= 0) {
+          body.unitCost = u;
+        }
+      }
       await apiStockCreateMovement(token, body);
       setMovQty("");
       setMovNewStock("");
       setMovNote("");
+      setMovUnitCostDigits("");
       setMovProductId("");
       setMovProductSearch("");
       await refresh();
     } catch (err) {
       setMovErr(err instanceof Error ? err.message : "Erro ao registrar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubmitCategory(e: FormEvent) {
+    e.preventDefault();
+    if (!token || !canProducts) {
+      return;
+    }
+    const name = catName.trim();
+    if (!name) {
+      return;
+    }
+    setBusy(true);
+    setLoadErr(null);
+    try {
+      if (catEditing) {
+        await apiStockPatchCategory(token, catEditing.id, {
+          name,
+          sortOrder: Number.parseInt(catSort, 10) || 0,
+        });
+      } else {
+        await apiStockCreateCategory(token, {
+          name,
+          sortOrder: Number.parseInt(catSort, 10) || 0,
+        });
+      }
+      setCatName("");
+      setCatSort("0");
+      setCatEditing(null);
+      await loadCategories();
+      await loadProducts();
+    } catch (err) {
+      setLoadErr(err instanceof Error ? err.message : "Erro ao salvar categoria");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDeleteCategory(c: ProductCategoryRow) {
+    if (!token || !canProducts) {
+      return;
+    }
+    if (!window.confirm(`Excluir a categoria "${c.name}"? Produtos ficam sem categoria.`)) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiStockDeleteCategory(token, c.id);
+      await loadCategories();
+      await loadProducts();
+    } catch (err) {
+      setLoadErr(err instanceof Error ? err.message : "Erro ao excluir");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubmitInventory(e: FormEvent) {
+    e.preventDefault();
+    if (!token || !canAjuste) {
+      return;
+    }
+    setInvErr(null);
+    const counts: { productId: string; counted: number }[] = [];
+    for (const p of products) {
+      if (!p.controlsStock) {
+        continue;
+      }
+      const raw = invCounts[p.id];
+      const counted = Number.parseFloat(String(raw ?? "").replace(",", "."));
+      if (!Number.isFinite(counted) || counted < 0) {
+        setInvErr(`Quantidade inválida para "${p.name}".`);
+        return;
+      }
+      counts.push({ productId: p.id, counted });
+    }
+    if (counts.length === 0) {
+      setInvErr("Nenhum produto com controle de estoque.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiStockInventoryClose(token, counts);
+      await refresh();
+    } catch (err) {
+      setInvErr(err instanceof Error ? err.message : "Erro no inventário");
     } finally {
       setBusy(false);
     }
@@ -324,6 +501,18 @@ export function ErpStockScreen() {
             Produtos
           </button>
         ) : null}
+        {canProducts ? (
+          <button
+            type="button"
+            onClick={() => setTab("categorias")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === "categorias" ? "bg-amber-500/15 text-amber-100" : "text-zinc-500 hover:text-zinc-300",
+            )}
+          >
+            Categorias
+          </button>
+        ) : null}
         {canMove ? (
           <button
             type="button"
@@ -334,6 +523,18 @@ export function ErpStockScreen() {
             )}
           >
             Movimentações
+          </button>
+        ) : null}
+        {canAjuste ? (
+          <button
+            type="button"
+            onClick={() => setTab("inventario")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === "inventario" ? "bg-amber-500/15 text-amber-100" : "text-zinc-500 hover:text-zinc-300",
+            )}
+          >
+            Inventário
           </button>
         ) : null}
       </div>
@@ -352,8 +553,11 @@ export function ErpStockScreen() {
                   <THead>
                     <Tr>
                       <Th>Nome</Th>
+                      <Th>Categoria</Th>
                       <Th>Preço</Th>
                       <Th>Estoque</Th>
+                      <Th>Mín.</Th>
+                      <Th>Custo médio</Th>
                       <Th>Controle</Th>
                       <Th>Ativo</Th>
                       <Th />
@@ -363,8 +567,13 @@ export function ErpStockScreen() {
                     {products.map((p) => (
                       <Tr key={p.id}>
                         <Td className="font-medium text-zinc-200">{p.name}</Td>
+                        <Td className="text-sm text-zinc-500">{p.category?.name ?? "—"}</Td>
                         <Td className="tabular-nums">{money.format(p.price)}</Td>
-                        <Td className="tabular-nums">{p.controlsStock ? p.stock : "—"}</Td>
+                        <Td className={stockBalanceClass(p)}>{p.controlsStock ? p.stock : "—"}</Td>
+                        <Td className="tabular-nums text-zinc-500">{p.controlsStock ? p.minStock : "—"}</Td>
+                        <Td className="tabular-nums text-zinc-500">
+                          {p.controlsStock && p.averageCost != null ? money.format(p.averageCost) : "—"}
+                        </Td>
                         <Td>{p.controlsStock ? "Sim" : "Não"}</Td>
                         <Td>{p.active ? "Sim" : "Não"}</Td>
                         <Td>
@@ -381,6 +590,86 @@ export function ErpStockScreen() {
                               type="button"
                               className="text-sm font-medium text-red-400/90 hover:text-red-300"
                               onClick={() => void onDeleteProduct(p)}
+                              disabled={busy}
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === "categorias" && canProducts ? (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="space-y-4 !p-5">
+              <p className="text-sm font-medium text-zinc-200">
+                {catEditing ? `Editando: ${catEditing.name}` : "Nova categoria"}
+              </p>
+              <form className="flex flex-wrap items-end gap-3" onSubmit={(e) => void onSubmitCategory(e)}>
+                <div className="min-w-[200px] flex-1">
+                  <Input label="Nome" value={catName} onChange={(e) => setCatName(e.target.value)} required />
+                </div>
+                <div className="w-28">
+                  <Input label="Ordem" value={catSort} onChange={(e) => setCatSort(e.target.value)} placeholder="0" />
+                </div>
+                <Button type="submit" variant="primary" disabled={busy}>
+                  {catEditing ? "Salvar" : "Adicionar"}
+                </Button>
+                {catEditing ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setCatEditing(null);
+                      setCatName("");
+                      setCatSort("0");
+                    }}
+                  >
+                    Cancelar edição
+                  </Button>
+                ) : null}
+              </form>
+              <div className="overflow-x-auto">
+                <Table>
+                  <THead>
+                    <Tr>
+                      <Th>Nome</Th>
+                      <Th>Ordem</Th>
+                      <Th />
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {categories.map((c) => (
+                      <Tr key={c.id}>
+                        <Td className="text-zinc-200">{c.name}</Td>
+                        <Td className="tabular-nums text-zinc-500">{c.sortOrder}</Td>
+                        <Td>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="text-sm font-medium text-amber-300/90 hover:text-amber-200"
+                              onClick={() => {
+                                setCatEditing(c);
+                                setCatName(c.name);
+                                setCatSort(String(c.sortOrder));
+                              }}
+                              disabled={busy}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="text-sm font-medium text-red-400/90 hover:text-red-300"
+                              onClick={() => void onDeleteCategory(c)}
                               disabled={busy}
                             >
                               Excluir
@@ -480,6 +769,20 @@ export function ErpStockScreen() {
                       required
                     />
                   )}
+                  {movKind === "ENTRADA" ? (
+                    <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+                      <span className="text-zinc-400">Preço de custo unitário (opcional)</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        placeholder="Atualiza custo médio"
+                        value={formatDigitsAsBRL(movUnitCostDigits)}
+                        onChange={(e) => setMovUnitCostDigits(e.target.value.replace(/\D/g, ""))}
+                        className="rounded-lg border border-white/[0.1] bg-[#141414] px-3 py-2 text-sm text-zinc-100 outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/30"
+                      />
+                    </label>
+                  ) : null}
                   <Input label="Observação (opcional)" value={movNote} onChange={(e) => setMovNote(e.target.value)} />
                   {movErr ? <p className="text-sm text-red-400/90">{movErr}</p> : null}
                   <Button type="submit" variant="primary" className="w-full" disabled={busy}>
@@ -491,12 +794,27 @@ export function ErpStockScreen() {
           </Card>
 
           <div className="space-y-3">
-            <Input
-              label="Filtrar histórico por produto"
-              value={historyFilter}
-              onChange={(e) => setHistoryFilter(e.target.value)}
-              placeholder="Digite parte do nome…"
-            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Filtrar histórico por produto"
+                value={historyFilter}
+                onChange={(e) => setHistoryFilter(e.target.value)}
+                placeholder="Digite parte do nome…"
+              />
+              <label className="block text-[13px] text-zinc-500">
+                Tipo de movimentação
+                <select
+                  className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#1a1a1a] px-3 py-2 text-sm text-zinc-100"
+                  value={movementKindFilter}
+                  onChange={(e) => setMovementKindFilter(e.target.value as typeof movementKindFilter)}
+                >
+                  <option value="">Todos</option>
+                  <option value="ENTRADA">Entrada</option>
+                  <option value="SAIDA">Saída</option>
+                  <option value="AJUSTE">Ajuste</option>
+                </select>
+              </label>
+            </div>
             <Card>
               <CardContent className="!p-0">
                 <div className="max-h-[480px] overflow-auto">
@@ -507,6 +825,7 @@ export function ErpStockScreen() {
                         <Th>Produto</Th>
                         <Th>Tipo</Th>
                         <Th>Δ</Th>
+                        <Th>Custo un.</Th>
                         <Th>Saldo</Th>
                         <Th>Por</Th>
                       </Tr>
@@ -525,6 +844,9 @@ export function ErpStockScreen() {
                           <Td className="text-zinc-200">{m.product.name}</Td>
                           <Td>{m.kind}</Td>
                           <Td className="tabular-nums">{m.delta >= 0 ? `+${m.delta}` : m.delta}</Td>
+                          <Td className="tabular-nums text-zinc-500">
+                            {m.unitCost != null ? money.format(m.unitCost) : "—"}
+                          </Td>
                           <Td className="tabular-nums text-zinc-400">
                             {m.balanceBefore} → {m.balanceAfter}
                           </Td>
@@ -537,6 +859,60 @@ export function ErpStockScreen() {
               </CardContent>
             </Card>
           </div>
+        </div>
+      ) : null}
+
+      {tab === "inventario" && canAjuste ? (
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-500">
+            Informe a contagem física de cada item. O sistema gera movimentações de ajuste apenas onde houver diferença em
+            relação ao saldo atual.
+          </p>
+          {invErr ? <p className="text-sm text-red-400/90">{invErr}</p> : null}
+          <form onSubmit={(e) => void onSubmitInventory(e)}>
+            <Card>
+              <CardContent className="!p-0">
+                <div className="max-h-[min(70vh,520px)] overflow-auto">
+                  <Table>
+                    <THead>
+                      <Tr>
+                        <Th>Produto</Th>
+                        <Th>Saldo sistema</Th>
+                        <Th>Contado na prateleira</Th>
+                      </Tr>
+                    </THead>
+                    <TBody>
+                      {products
+                        .filter((p) => p.controlsStock)
+                        .map((p) => (
+                          <Tr key={p.id}>
+                            <Td className="font-medium text-zinc-200">{p.name}</Td>
+                            <Td className="tabular-nums text-zinc-500">{p.stock}</Td>
+                            <Td>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                className="w-full min-w-[6rem] rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-sm text-zinc-100"
+                                value={invCounts[p.id] ?? String(p.stock)}
+                                onChange={(e) =>
+                                  setInvCounts((prev) => ({ ...prev, [p.id]: e.target.value }))
+                                }
+                              />
+                            </Td>
+                          </Tr>
+                        ))}
+                    </TBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+            <div className="mt-4 flex justify-end">
+              <Button type="submit" variant="primary" disabled={busy}>
+                Aplicar inventário
+              </Button>
+            </div>
+          </form>
         </div>
       ) : null}
 
@@ -570,6 +946,27 @@ export function ErpStockScreen() {
                 <label className="flex items-center gap-2 text-sm text-zinc-300">
                   <input type="checkbox" checked={formActive} onChange={(e) => setFormActive(e.target.checked)} />
                   Ativo na venda
+                </label>
+                <Input
+                  label="Estoque mínimo (alerta)"
+                  value={formMinStock}
+                  onChange={(e) => setFormMinStock(e.target.value)}
+                  placeholder="0"
+                />
+                <label className="block text-[13px] text-zinc-500">
+                  Categoria (opcional)
+                  <select
+                    className="mt-1 w-full rounded-lg border border-white/[0.1] bg-[#1a1a1a] px-3 py-2 text-sm text-zinc-100"
+                    value={formCategoryId}
+                    onChange={(e) => setFormCategoryId(e.target.value)}
+                  >
+                    <option value="">— Nenhuma —</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 {modal === "create" ? (
                   <Input

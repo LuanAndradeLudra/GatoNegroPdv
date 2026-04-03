@@ -14,6 +14,7 @@ import {
   apiPdvReopenOrder,
   apiPdvRemoveItem,
   apiPdvUpdateItemQty,
+  pdvStockStreamUrl,
   type CustomerRow,
   type PdvOrder,
   type PdvProduct,
@@ -30,6 +31,24 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 
 function qtyInOrder(ord: PdvOrder, productId: string): number {
   return ord.items.filter((i) => i.productId === productId).reduce((s, i) => s + i.quantity, 0);
+}
+
+function triggerShake(setter: (id: string | null) => void, productId: string): void {
+  setter(productId);
+  window.setTimeout(() => setter(null), 450);
+}
+
+function stockLineClass(p: PdvProduct): string {
+  if (!p.controlsStock) {
+    return "text-[10px] leading-snug text-zinc-500";
+  }
+  if (p.minStock > 0 && p.stock <= p.minStock) {
+    return "text-[10px] leading-snug font-semibold text-red-400";
+  }
+  if (p.stock < 5) {
+    return "text-[10px] leading-snug font-medium text-orange-400/95";
+  }
+  return "text-[10px] leading-snug text-zinc-500";
 }
 
 function kitchenStatusLabel(status: string | null): string | null {
@@ -78,6 +97,13 @@ export function PdvScreen({
   const [mesaEdit, setMesaEdit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shakeProductId, setShakeProductId] = useState<string | null>(null);
+  const [cancelKitchenModal, setCancelKitchenModal] = useState<{
+    orderId: string;
+    restoreStock: boolean;
+    lines: { id: string; productName: string; quantity: number }[];
+    choices: Record<string, "return" | "waste">;
+  } | null>(null);
 
   const loadProducts = useCallback(async () => {
     if (!token) {
@@ -136,6 +162,30 @@ export function PdvScreen({
     void loadProducts().catch(() => setError("Não foi possível carregar produtos."));
     void loadPaymentMethods();
   }, [token, loadProducts, loadPaymentMethods]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+    const url = pdvStockStreamUrl(token);
+    const es = new EventSource(url);
+    es.addEventListener("message", (ev) => {
+      try {
+        const data = JSON.parse((ev as MessageEvent).data as string) as { type?: string };
+        if (data.type === "stock") {
+          void loadProducts().catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+    es.addEventListener("error", () => {
+      /* reconexão automática do EventSource */
+    });
+    return () => {
+      es.close();
+    };
+  }, [token, loadProducts]);
 
   useEffect(() => {
     if (!token) {
@@ -256,6 +306,7 @@ export function PdvScreen({
     const inCart = order.items.filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
     const cap = p.controlsStock && p.availableForOrder != null ? p.availableForOrder : null;
     if (cap != null && inCart + 1 > cap + 1e-6) {
+      triggerShake(setShakeProductId, p.id);
       setError(`Limite de estoque para "${p.name}". Máximo neste pedido: ${cap} un.`);
       return;
     }
@@ -372,6 +423,27 @@ export function PdvScreen({
     }
   }
 
+  async function runCancel(
+    orderId: string,
+    restoreStock: boolean,
+    kitchenItemRestore?: Record<string, "return" | "waste">,
+  ) {
+    if (!token) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPdvCancelOrder(token, orderId, { restoreStock, kitchenItemRestore });
+      setCancelKitchenModal(null);
+      await loadRecentClosed();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao estornar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancelSale(o: PdvOrder) {
     if (!token) {
       return;
@@ -379,20 +451,27 @@ export function PdvScreen({
     if (!window.confirm("Estornar esta venda? Ela será marcada como cancelada.")) {
       return;
     }
-    const restoreStock =
-      o.status === "CLOSED"
-        ? window.confirm("Deseja retornar os itens ao estoque?\n\nOK = Sim\nCancelar = Não")
-        : false;
-    setBusy(true);
-    setError(null);
-    try {
-      await apiPdvCancelOrder(token, o.id, restoreStock);
-      await loadRecentClosed();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao estornar");
-    } finally {
-      setBusy(false);
+    let restoreStock = false;
+    if (o.status === "CLOSED") {
+      restoreStock = window.confirm("Deseja retornar os itens ao estoque?\n\nOK = Sim\nCancelar = Não");
+      if (restoreStock) {
+        const kitchenLines = o.items.filter((i) => i.isKitchenItem && i.controlsStock);
+        if (kitchenLines.length > 0) {
+          setCancelKitchenModal({
+            orderId: o.id,
+            restoreStock: true,
+            lines: kitchenLines.map((i) => ({
+              id: i.id,
+              productName: i.productName,
+              quantity: i.quantity,
+            })),
+            choices: Object.fromEntries(kitchenLines.map((i) => [i.id, "return" as const])),
+          });
+          return;
+        }
+      }
     }
+    await runCancel(o.id, restoreStock);
   }
 
   function leaveSelling() {
@@ -466,19 +545,31 @@ export function PdvScreen({
                       <span className="min-w-[1.5rem] text-center">{i.quantity}</span>
                       <button
                         type="button"
-                        className="rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800"
-                        disabled={
-                          busy ||
-                          (i.controlsStock &&
+                        className={cn(
+                          "rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800",
+                          i.controlsStock &&
                             i.maxQuantity != null &&
-                            i.quantity >= i.maxQuantity - 1e-6)
-                        }
+                            i.quantity >= i.maxQuantity - 1e-6 &&
+                            "opacity-50",
+                        )}
+                        disabled={busy}
                         title={
                           i.controlsStock && i.maxQuantity != null && i.quantity >= i.maxQuantity - 1e-6
                             ? "Limite de estoque para este pedido"
                             : undefined
                         }
-                        onClick={() => void changeQty(i.id, i.quantity + 1)}
+                        onClick={() => {
+                          const atMax =
+                            i.controlsStock &&
+                            i.maxQuantity != null &&
+                            i.quantity >= i.maxQuantity - 1e-6;
+                          if (atMax) {
+                            triggerShake(setShakeProductId, i.productId);
+                            setError(`Limite de estoque para "${i.productName}" neste pedido.`);
+                            return;
+                          }
+                          void changeQty(i.id, i.quantity + 1);
+                        }}
                       >
                         +
                       </button>
@@ -634,10 +725,11 @@ export function PdvScreen({
                     type="button"
                     className={cn(
                       "flex flex-col items-start gap-1 rounded-lg border border-white/[0.08] bg-[#1e1e1e]/80 p-3 text-left text-sm transition-colors hover:border-amber-500/30 hover:bg-[#222]",
-                      atCap && "cursor-not-allowed opacity-50 hover:border-white/[0.08] hover:bg-[#1e1e1e]/80",
+                      atCap && "opacity-55 hover:border-white/[0.08] hover:bg-[#1e1e1e]/80",
+                      shakeProductId === p.id && "gn-shake",
                     )}
                     onClick={() => void addProduct(p)}
-                    disabled={busy || atCap}
+                    disabled={busy}
                     title={atCap ? "Sem quantidade disponível para este pedido (estoque ou reserva em outras comandas)" : undefined}
                   >
                     <span className="font-medium text-zinc-100">{p.name}</span>
@@ -646,10 +738,21 @@ export function PdvScreen({
                       {p.isKitchenItem ? " · Cozinha" : ""}
                     </span>
                     {p.controlsStock ? (
-                      <span className="text-[10px] leading-snug text-zinc-500">
-                        Físico: {p.stock}
-                        {cap != null ? ` · Máx. este pedido: ${cap}` : ""}
-                        {remaining != null ? ` · Falta lançar: ${remaining}` : ""}
+                      <span
+                        className={cn(
+                          "inline-flex max-w-full flex-wrap items-center gap-x-1 rounded-md px-1.5 py-0.5 ring-1 ring-inset",
+                          p.minStock > 0 && p.stock <= p.minStock
+                            ? "bg-red-950/50 ring-red-500/35"
+                            : p.stock < 5
+                              ? "bg-orange-950/40 ring-orange-500/30"
+                              : "bg-white/[0.04] ring-white/[0.08]",
+                        )}
+                      >
+                        <span className={stockLineClass(p)}>
+                          Físico: {p.stock}
+                          {cap != null ? ` · Máx. este pedido: ${cap}` : ""}
+                          {remaining != null ? ` · Falta lançar: ${remaining}` : ""}
+                        </span>
                       </span>
                     ) : null}
                   </button>
@@ -828,6 +931,91 @@ export function PdvScreen({
       {cartPanel}
     </div>
       )}
+      {cancelKitchenModal ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#1a1a1a] p-5 shadow-xl">
+            <h3 className="text-base font-semibold text-zinc-100">Itens de cozinha no estorno</h3>
+            <p className="mt-2 text-sm text-zinc-500">
+              Para cada item, informe se houve desperdício (não volta ao estoque físico) ou se pode devolver ao estoque.
+            </p>
+            <ul className="mt-4 max-h-[50vh] space-y-3 overflow-auto">
+              {cancelKitchenModal.lines.map((ln) => (
+                <li key={ln.id} className="rounded-lg border border-white/[0.06] bg-[#141414] px-3 py-2">
+                  <p className="text-sm text-zinc-200">
+                    {ln.productName}{" "}
+                    <span className="text-zinc-500">
+                      × {ln.quantity}
+                    </span>
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                      <input
+                        type="radio"
+                        name={`kr-${ln.id}`}
+                        checked={cancelKitchenModal.choices[ln.id] === "return"}
+                        onChange={() =>
+                          setCancelKitchenModal((m) =>
+                            m
+                              ? {
+                                  ...m,
+                                  choices: { ...m.choices, [ln.id]: "return" },
+                                }
+                              : m,
+                          )
+                        }
+                      />
+                      Volta ao estoque
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                      <input
+                        type="radio"
+                        name={`kr-${ln.id}`}
+                        checked={cancelKitchenModal.choices[ln.id] === "waste"}
+                        onChange={() =>
+                          setCancelKitchenModal((m) =>
+                            m
+                              ? {
+                                  ...m,
+                                  choices: { ...m.choices, [ln.id]: "waste" },
+                                }
+                              : m,
+                          )
+                        }
+                      />
+                      Desperdício
+                    </label>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setCancelKitchenModal(null)}
+              >
+                Voltar
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={busy}
+                onClick={() =>
+                  void runCancel(cancelKitchenModal.orderId, cancelKitchenModal.restoreStock, cancelKitchenModal.choices)
+                }
+              >
+                Confirmar estorno
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <CheckoutModal
         open={checkoutOpen}
         subtotal={order?.subtotal ?? 0}
