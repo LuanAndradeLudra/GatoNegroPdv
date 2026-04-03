@@ -14,6 +14,7 @@ import {
 import { type ReactNode } from "react";
 import { cn } from "../lib/cn";
 import type { UserAccess } from "../api";
+import { ThemeToggle } from "./ThemeToggle";
 
 export type ShellView =
   | "home"
@@ -95,20 +96,20 @@ export function AppShell({
   const pageTitle = title ?? TITLES[view];
 
   return (
-    <div className="flex h-screen min-h-0 w-full bg-[#121212] text-zinc-100">
-      <aside className="flex w-[220px] shrink-0 flex-col border-r border-white/[0.08] bg-[#141414]/95 backdrop-blur-xl">
-        <div className="border-b border-white/[0.06] px-4 py-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400/25 to-amber-700/20 ring-1 ring-amber-500/20">
-              <span className="text-lg font-bold text-amber-200">GN</span>
-            </div>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate font-semibold tracking-tight text-zinc-100">Gato Negro</p>
-              <p className="text-[11px] text-zinc-500">{brandSubtitle}</p>
-            </div>
+    <div className="flex h-screen min-h-0 w-full overflow-hidden bg-[#f4f6f9] text-slate-800 dark:bg-[#0c0c0f] dark:text-zinc-100">
+      {/* Sidebar — estilo painel web (AdminLTE-like) */}
+      <aside className="flex w-[260px] shrink-0 flex-col border-r border-slate-200/90 bg-white shadow-[2px_0_16px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+        <div className="flex h-[57px] shrink-0 items-center gap-3 border-b border-slate-200/80 px-4 dark:border-zinc-800">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-900 ring-1 ring-slate-900/10 dark:bg-zinc-950 dark:ring-zinc-700">
+            <img src="/logo.jpg" alt="" className="h-full w-full object-cover" width={40} height={40} />
+          </div>
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">Gato Negro</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-500">{brandSubtitle}</p>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3 pt-4" aria-label="Módulos">
           {NAV.map((item) => {
             const ok = item.enabled(access);
             const cashLocked = navBlockedByCash(item.id, access, cashOpen);
@@ -131,43 +132,58 @@ export function AppShell({
                 title={titleNav}
                 onClick={() => !disabled && onNavigate(item.id)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                  active && !disabled && "bg-white/[0.08] text-zinc-50 shadow-sm shadow-black/20",
-                  !active && !disabled && "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200",
-                  disabled && "cursor-not-allowed text-zinc-600 opacity-50",
+                  "group flex w-full items-center gap-3 rounded-md border-l-[3px] py-2.5 pl-3 pr-2 text-left text-[13px] font-medium transition-colors",
+                  active && !disabled
+                    ? "border-l-blue-600 bg-blue-50/95 text-blue-900 shadow-sm dark:border-l-blue-500 dark:bg-blue-950/45 dark:text-blue-100"
+                    : "border-l-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800/90 dark:hover:text-zinc-100",
+                  disabled && "cursor-not-allowed text-slate-400 opacity-50 dark:text-zinc-600",
                 )}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0 opacity-90" strokeWidth={1.75} />
-                <span className="truncate font-medium">{item.label}</span>
+                <Icon
+                  className={cn(
+                    "h-[18px] w-[18px] shrink-0",
+                    active && !disabled ? "text-blue-600 dark:text-blue-400" : "text-slate-500 group-hover:text-slate-700 dark:text-zinc-500 dark:group-hover:text-zinc-300",
+                  )}
+                  strokeWidth={1.85}
+                />
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
         </nav>
-        <div className="border-t border-white/[0.06] p-2">
+
+        <div className="shrink-0 border-t border-slate-200/80 p-3 dark:border-zinc-800">
           <button
             type="button"
             onClick={onLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-300"
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-[13px] font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           >
-            <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+            <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.85} />
             Sair
           </button>
         </div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#121212]/80 px-6 backdrop-blur-md">
-          <h1 className="text-sm font-semibold tracking-tight text-zinc-200">{pageTitle}</h1>
-          <div className="flex items-center gap-3">{headerRight}</div>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200/90 bg-white px-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Painel</p>
+            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{pageTitle}</h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {headerRight}
+            <ThemeToggle />
+          </div>
         </header>
+
         {cashClosedBanner ? (
-          <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/25 bg-amber-950/40 px-4 py-2.5 text-center text-[13px] text-amber-100/95">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" strokeWidth={2} aria-hidden />
+          <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-200/80 bg-amber-50 px-4 py-2.5 text-center text-[13px] text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100/95">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" strokeWidth={2} aria-hidden />
             <span>
               Operação bloqueada: o caixa está fechado.{" "}
               <button
                 type="button"
-                className="font-semibold text-amber-300 underline underline-offset-2 hover:text-amber-200"
+                className="font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-200"
                 onClick={cashClosedBanner.onOpenCash}
               >
                 Clique aqui para abrir
@@ -175,6 +191,7 @@ export function AppShell({
             </span>
           </div>
         ) : null}
+
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
     </div>

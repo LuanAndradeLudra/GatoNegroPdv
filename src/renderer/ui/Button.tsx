@@ -1,22 +1,20 @@
-import { type ButtonHTMLAttributes, forwardRef } from "react";
 import { cn } from "../lib/cn";
+import { ButtonHTMLAttributes, forwardRef } from "react";
 
 export type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
-    "bg-gradient-to-b from-amber-300 to-amber-600 text-zinc-950 font-semibold shadow-md shadow-amber-950/30 hover:brightness-105 border border-amber-400/30",
+    "bg-slate-900 text-white shadow-sm hover:bg-slate-800 active:scale-[0.98] border border-transparent dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white",
   outline:
-    "border border-white/[0.12] bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] backdrop-blur-sm",
-  ghost: "border border-transparent text-zinc-300 hover:bg-white/[0.06]",
-  danger: "border border-red-500/25 bg-red-500/10 text-red-300 hover:bg-red-500/15",
+    "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-sm active:scale-[0.98] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:border-zinc-500",
+  ghost:
+    "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
+  danger:
+    "bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 active:scale-[0.98] dark:bg-red-950/50 dark:text-red-400 dark:border-red-900/60 dark:hover:bg-red-950/80",
 };
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-};
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }>(function Button(
   { className, variant = "primary", type = "button", ...props },
   ref,
 ) {
@@ -25,7 +23,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-45",
+        "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none",
         variantClass[variant],
         className,
       )}

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { apiLogin } from "./api";
 import { useAuth } from "./AuthContext";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 
@@ -26,36 +27,76 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#121212] bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(201,162,39,0.12),transparent)] p-6 font-sans">
-      <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-[#1e1e1e]/90 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">Gato Negro</h1>
-          <p className="mt-1 text-sm text-zinc-500">PDV — Entre com seu usuário</p>
+    <div className="relative flex min-h-screen items-center justify-center bg-[#f4f6f9] p-6 font-sans antialiased dark:bg-[#0c0c0f]">
+      <div className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
+
+      <div className="w-full max-w-[400px] rounded-2xl border border-slate-200 bg-white p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-[0_8px_30px_rgb(0,0,0,0.35)]">
+        
+        <div className="mb-10 text-center">
+          {/* Ícone ou Logo sutil */}
+          <div className="mx-auto mb-4 flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl bg-slate-900 shadow-lg ring-1 ring-slate-900/10 dark:bg-zinc-950 dark:ring-zinc-700">
+            <img src="/logo.jpg" alt="Logo" width={82} height={82} className="h-full w-full object-cover" />
+          </div>
+
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-50">Bem-vindo de volta</h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
+            Acesse o painel do Gato Negro
+          </p>
         </div>
-        <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-          <Input
-            label="Login"
-            type="text"
-            name="login"
-            autoComplete="username"
-            value={userLogin}
-            onChange={(e) => setUserLogin(e.target.value)}
+
+        <form className="space-y-5" onSubmit={onSubmit}>
+          <div className="space-y-1">
+            <Input
+              label="Usuário"
+              placeholder="Digite seu login"
+              type="text"
+              name="login"
+              className="h-11 border-slate-200 bg-slate-50/50 text-black transition-all focus:bg-white"
+              autoComplete="username"
+              value={userLogin}
+              onChange={(e) => setUserLogin(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+               <label className="text-sm font-medium text-slate-700 dark:text-zinc-300">Senha</label>
+            </div>
+            <Input
+              placeholder="••••••••"
+              type="password"
+              name="password"
+              className="h-11 border-slate-200 bg-slate-50/50 transition-all focus:bg-white"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-center dark:bg-red-950/40">
+              <p className="text-xs font-medium text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          )}
+
+          <Button 
+            type="submit" 
+            className="h-11 w-full bg-slate-900 font-semibold text-white transition-all hover:bg-slate-800 active:scale-[0.98]" 
             disabled={submitting}
-          />
-          <Input
-            label="Senha"
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={submitting}
-          />
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" className="mt-1 w-full" disabled={submitting}>
-            {submitting ? "Entrando…" : "Entrar"}
+          >
+            {submitting ? "Autenticando..." : "Entrar no Sistema"}
           </Button>
         </form>
+
+        <footer className="mt-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-zinc-500">
+            v1.0 — Enterprise Edition
+          </p>
+        </footer>
       </div>
     </div>
   );

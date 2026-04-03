@@ -82,38 +82,45 @@ export function DashboardHome({
     };
   }, [token, access.pdv]);
 
+  const muted = "text-slate-500 dark:text-zinc-500";
+  const labelMuted = "text-xs font-medium text-slate-500 dark:text-zinc-400";
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-6 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.06] pb-6">
+    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200/90 pb-6 dark:border-zinc-800">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Sessão</p>
-          <p className="mt-1 truncate text-lg font-semibold text-zinc-100">{user.name}</p>
-          <p className="text-sm text-zinc-500">
-            {user.login} · <span className="text-zinc-400">{user.role}</span>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Sessão</p>
+          <p className="mt-1 truncate text-lg font-semibold text-slate-900 dark:text-zinc-50">{user.name}</p>
+          <p className={cn("text-sm", muted)}>
+            {user.login} · <span className="text-slate-600 dark:text-zinc-400">{user.role}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {access.pdv ? (
-            <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-200/90">
+            <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/50 dark:text-blue-200">
               PDV
             </span>
           ) : (
-            <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-500">PDV</span>
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-500">
+              PDV
+            </span>
           )}
           {access.erp ? (
-            <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-200/90">
+            <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/50 dark:text-blue-200">
               ERP
             </span>
           ) : (
-            <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-500">ERP</span>
+            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-500">
+              ERP
+            </span>
           )}
           {access.financeiro ? (
-            <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-200/90">
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/45 dark:text-emerald-200">
               Fin
             </span>
           ) : null}
           {access.manageUsers ? (
-            <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-200/90">
+            <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-800 dark:border-violet-900/50 dark:bg-violet-950/45 dark:text-violet-200">
               Admin
             </span>
           ) : null}
@@ -126,16 +133,16 @@ export function DashboardHome({
             <CardContent className="!p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium text-zinc-500">Vendas encerradas hoje</p>
-                  <p className="mt-2 text-2xl font-semibold tabular-nums text-zinc-50">
+                  <p className={labelMuted}>Vendas encerradas hoje</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-900 dark:text-zinc-50">
                     {stats ? money.format(stats.closedTodayTotal) : "—"}
                   </p>
-                  <p className="mt-1 text-[11px] text-zinc-500">
+                  <p className={cn("mt-1 text-[11px]", muted)}>
                     {stats ? `${stats.closedTodayCount} pedido(s) fechado(s)` : "Carregando…"}
                   </p>
                 </div>
-                <div className="rounded-lg bg-amber-500/10 p-2.5 ring-1 ring-amber-500/15">
-                  <CreditCard className="h-5 w-5 text-amber-300/90" strokeWidth={1.75} />
+                <div className="rounded-lg bg-blue-50 p-2.5 ring-1 ring-blue-100 dark:bg-blue-950/50 dark:ring-blue-900/50">
+                  <CreditCard className="h-5 w-5 text-blue-600 dark:text-blue-400" strokeWidth={1.75} />
                 </div>
               </div>
             </CardContent>
@@ -144,25 +151,25 @@ export function DashboardHome({
             <CardContent className="!p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium text-zinc-500">Comandas abertas</p>
-                  <p className="mt-2 text-2xl font-semibold tabular-nums text-zinc-50">
+                  <p className={labelMuted}>Comandas abertas</p>
+                  <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-900 dark:text-zinc-50">
                     {stats ? stats.openComandasCount : "—"}
                   </p>
-                  <p className="mt-1 text-[11px] text-zinc-500">Em andamento no salão</p>
+                  <p className={cn("mt-1 text-[11px]", muted)}>Em andamento no salão</p>
                 </div>
-                <div className="rounded-lg bg-emerald-500/10 p-2.5 ring-1 ring-emerald-500/15">
-                  <UsersRound className="h-5 w-5 text-emerald-300/90" strokeWidth={1.75} />
+                <div className="rounded-lg bg-emerald-50 p-2.5 ring-1 ring-emerald-100 dark:bg-emerald-950/45 dark:ring-emerald-900/45">
+                  <UsersRound className="h-5 w-5 text-emerald-700 dark:text-emerald-400" strokeWidth={1.75} />
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card className="sm:col-span-2 lg:col-span-1">
             <CardContent className="!p-5">
-              <p className="text-xs font-medium text-zinc-500">Atalhos de venda</p>
+              <p className={labelMuted}>Atalhos de venda</p>
               {pdvBlocked ? (
-                <p className="mt-3 text-[13px] leading-snug text-zinc-500">Abra o caixa para vender.</p>
+                <p className={cn("mt-3 text-[13px] leading-snug", muted)}>Abra o caixa para vender.</p>
               ) : null}
-              {pdvLoading ? <p className="mt-3 text-[13px] text-zinc-500">Verificando caixa…</p> : null}
+              {pdvLoading ? <p className={cn("mt-3 text-[13px]", muted)}>Verificando caixa…</p> : null}
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
@@ -172,8 +179,8 @@ export function DashboardHome({
                   className={cn(
                     "flex w-full items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-colors",
                     pdvReady
-                      ? "border-amber-500/35 bg-amber-500/[0.12] text-amber-100 hover:bg-amber-500/18"
-                      : "cursor-not-allowed border-white/[0.06] bg-white/[0.03] text-zinc-600 opacity-60",
+                      ? "border-blue-200 bg-blue-50 text-blue-900 hover:bg-blue-100/90 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100 dark:hover:bg-blue-950/70"
+                      : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-70 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-600",
                   )}
                 >
                   <Store className="h-4 w-4 shrink-0" strokeWidth={1.75} />
@@ -187,8 +194,8 @@ export function DashboardHome({
                   className={cn(
                     "flex w-full items-center justify-center gap-2 rounded-lg border py-2.5 text-sm font-medium transition-colors",
                     pdvReady
-                      ? "border-white/[0.12] bg-white/[0.06] text-zinc-100 hover:bg-white/[0.1]"
-                      : "cursor-not-allowed border-white/[0.06] bg-white/[0.03] text-zinc-600 opacity-60",
+                      ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                      : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 opacity-70 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-600",
                   )}
                 >
                   <ClipboardList className="h-4 w-4 shrink-0" strokeWidth={1.75} />
@@ -199,13 +206,13 @@ export function DashboardHome({
           </Card>
         </section>
       ) : (
-        <p className="text-sm text-zinc-500">Sem acesso ao PDV — métricas indisponíveis.</p>
+        <p className={cn("text-sm", muted)}>Sem acesso ao PDV — métricas indisponíveis.</p>
       )}
 
-      {statsErr ? <p className="text-sm text-red-400/90">{statsErr}</p> : null}
+      {statsErr ? <p className="text-sm text-red-600 dark:text-red-400/90">{statsErr}</p> : null}
 
       <section>
-        <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">Ações rápidas</h2>
+        <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Ações rápidas</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {QUICK.map((q) => {
             const ok =
@@ -218,12 +225,12 @@ export function DashboardHome({
                     : q.id === "financeiro"
                       ? access.financeiro ?? false
                       : q.id === "users"
-                      ? access.manageUsers
-                      : q.id === "cozinha"
-                        ? access.kitchen
-                        : q.id === "clientes"
-                          ? access.clients
-                          : false;
+                        ? access.manageUsers
+                        : q.id === "cozinha"
+                          ? access.kitchen
+                          : q.id === "clientes"
+                            ? access.clients
+                            : false;
             const Icon = q.icon;
             const blockedPdv = q.id === "pdv" && access.pdv && !pdvReady;
             return (
@@ -240,8 +247,8 @@ export function DashboardHome({
                 }
                 onClick={() => ok && onNavigate(q.id)}
                 className={cn(
-                  "group flex flex-col items-start gap-2 rounded-xl border border-white/[0.08] bg-[#1e1e1e]/70 p-4 text-left shadow-md shadow-black/10 backdrop-blur-md transition-all",
-                  ok && "hover:border-amber-500/25 hover:bg-[#242424]/90",
+                  "group flex flex-col items-start gap-2 rounded-xl border border-slate-200/90 bg-white p-4 text-left shadow-sm transition-all dark:border-zinc-700 dark:bg-zinc-900",
+                  ok && "hover:border-blue-300 hover:shadow-md dark:hover:border-blue-700/80 dark:hover:bg-zinc-800/95",
                   !ok && "cursor-not-allowed opacity-45",
                 )}
               >
@@ -249,15 +256,15 @@ export function DashboardHome({
                   className={cn(
                     "flex h-9 w-9 items-center justify-center rounded-lg ring-1 ring-inset",
                     q.accent && ok
-                      ? "bg-amber-500/15 text-amber-200 ring-amber-500/20"
-                      : "bg-white/[0.06] text-zinc-400 ring-white/[0.06]",
+                      ? "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-950/50 dark:text-blue-300 dark:ring-blue-900/50"
+                      : "bg-slate-50 text-slate-500 ring-slate-100 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700",
                   )}
                 >
                   <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                 </div>
                 <div>
-                  <p className="font-medium text-zinc-100">{q.label}</p>
-                  <p className="text-[13px] text-zinc-500">
+                  <p className="font-medium text-slate-900 dark:text-zinc-100">{q.label}</p>
+                  <p className={cn("text-[13px]", muted)}>
                     {q.id === "pdv" && blockedPdv ? "Exige caixa aberto · " : null}
                     {q.description}
                   </p>

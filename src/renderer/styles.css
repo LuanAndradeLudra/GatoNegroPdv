@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 }
@@ -13,9 +15,18 @@ body,
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background-color: #121212;
-  color: #e4e4e7;
+  background-color: #f4f6f9;
+  color: #1e293b;
   -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background-color: #0c0c0f;
+  color: #e4e4e7;
+}
+
+button {
+  cursor: pointer !important;
 }
 
 @keyframes gn-shake {
