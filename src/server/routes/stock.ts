@@ -213,6 +213,20 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
     return;
   }
 
+  let initialAverageCost: number | undefined;
+  const avgRaw = req.body?.averageCost;
+  if (avgRaw !== undefined && avgRaw !== null && avgRaw !== "") {
+    const ac =
+      typeof avgRaw === "number"
+        ? avgRaw
+        : Number.parseFloat(String(avgRaw).replace(",", "."));
+    if (!Number.isFinite(ac) || ac < 0) {
+      res.status(400).json({ error: "Custo médio inválido." });
+      return;
+    }
+    initialAverageCost = round2(ac);
+  }
+
   const userId = req.user!.sub;
   const initial = round2(initialStock);
 
@@ -227,6 +241,7 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
         controlsStock,
         active,
         categoryId,
+        ...(initialAverageCost !== undefined ? { averageCost: initialAverageCost } : {}),
       },
       select: productSelectErp,
     });
@@ -240,6 +255,7 @@ stockRouter.post("/products", requireStockProdutos, async (req, res) => {
           balanceAfter: initial,
           note: "Estoque inicial no cadastro",
           createdById: userId,
+          ...(initialAverageCost !== undefined ? { unitCost: initialAverageCost } : {}),
         },
       });
     }
@@ -310,6 +326,22 @@ stockRouter.patch("/products/:id", requireStockProdutos, async (req, res) => {
   }
   if (req.body?.active !== undefined) {
     data.active = Boolean(req.body.active);
+  }
+  if (req.body?.averageCost !== undefined) {
+    const raw = req.body.averageCost;
+    if (raw === null || raw === "") {
+      data.averageCost = null;
+    } else {
+      const ac =
+        typeof raw === "number"
+          ? raw
+          : Number.parseFloat(String(raw).replace(",", "."));
+      if (!Number.isFinite(ac) || ac < 0) {
+        res.status(400).json({ error: "Custo médio inválido." });
+        return;
+      }
+      data.averageCost = round2(ac);
+    }
   }
 
   if (Object.keys(data).length === 0) {

@@ -82,6 +82,7 @@ export function ErpStockScreen() {
   const [formInitialStock, setFormInitialStock] = useState("");
   const [formMinStock, setFormMinStock] = useState("0");
   const [formCategoryId, setFormCategoryId] = useState("");
+  const [formAverageCostDigits, setFormAverageCostDigits] = useState("");
   const [formErr, setFormErr] = useState<string | null>(null);
 
   const [movProductId, setMovProductId] = useState("");
@@ -245,6 +246,7 @@ export function ErpStockScreen() {
     setFormInitialStock("0");
     setFormMinStock("0");
     setFormCategoryId("");
+    setFormAverageCostDigits("");
     setFormErr(null);
   }
 
@@ -258,6 +260,7 @@ export function ErpStockScreen() {
     setFormActive(p.active);
     setFormMinStock(String(p.minStock));
     setFormCategoryId(p.category?.id ?? "");
+    setFormAverageCostDigits(p.averageCost != null ? reaisToDigits(p.averageCost) : "");
     setFormErr(null);
   }
 
@@ -301,6 +304,15 @@ export function ErpStockScreen() {
       const minS = Number.parseFloat(formMinStock.replace(",", ".")) || 0;
       if (modal === "create") {
         const initial = Number.parseFloat(formInitialStock.replace(",", ".")) || 0;
+        let averageCost: number | undefined;
+        if (formControls && formAverageCostDigits.trim()) {
+          const a = parseDigitsToReais(formAverageCostDigits);
+          if (a == null || a < 0) {
+            setFormErr("Custo médio inválido.");
+            return;
+          }
+          averageCost = a;
+        }
         await apiStockCreateProduct(token, {
           name: formName.trim(),
           price,
@@ -310,9 +322,10 @@ export function ErpStockScreen() {
           initialStock: initial,
           minStock: minS,
           categoryId: formCategoryId || null,
+          ...(averageCost !== undefined ? { averageCost } : {}),
         });
       } else if (editing) {
-        await apiStockPatchProduct(token, editing.id, {
+        const patch: Parameters<typeof apiStockPatchProduct>[2] = {
           name: formName.trim(),
           price,
           isKitchenItem: formKitchen,
@@ -320,7 +333,20 @@ export function ErpStockScreen() {
           active: formActive,
           minStock: minS,
           categoryId: formCategoryId || null,
-        });
+        };
+        if (formControls) {
+          if (formAverageCostDigits.trim()) {
+            const a = parseDigitsToReais(formAverageCostDigits);
+            if (a == null || a < 0) {
+              setFormErr("Custo médio inválido.");
+              return;
+            }
+            patch.averageCost = a;
+          } else {
+            patch.averageCost = null;
+          }
+        }
+        await apiStockPatchProduct(token, editing.id, patch);
       }
       closeModal();
       await refresh();
@@ -943,6 +969,23 @@ export function ErpStockScreen() {
                   <input type="checkbox" checked={formControls} onChange={(e) => setFormControls(e.target.checked)} />
                   Controla estoque
                 </label>
+                {formControls ? (
+                  <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+                    <span className="text-zinc-400">Custo médio unitário (opcional)</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="Ex.: custo na compra"
+                      value={formatDigitsAsBRL(formAverageCostDigits)}
+                      onChange={(e) => setFormAverageCostDigits(e.target.value.replace(/\D/g, ""))}
+                      className="rounded-lg border border-white/[0.1] bg-[#141414] px-3 py-2 text-sm text-zinc-100 outline-none transition-colors focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/30"
+                    />
+                    <span className="font-normal text-zinc-600">
+                      Com estoque inicial, também registra o preço de custo na movimentação &quot;Estoque inicial no cadastro&quot;.
+                    </span>
+                  </label>
+                ) : null}
                 <label className="flex items-center gap-2 text-sm text-zinc-300">
                   <input type="checkbox" checked={formActive} onChange={(e) => setFormActive(e.target.checked)} />
                   Ativo na venda

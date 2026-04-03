@@ -815,6 +815,8 @@ export async function apiStockCreateProduct(
     initialStock?: number;
     minStock?: number;
     categoryId?: string | null;
+    /** Custo médio unitário; na entrada inicial também grava unitCost da movimentação. */
+    averageCost?: number;
   },
 ): Promise<ErpProductRow> {
   const res = await fetch("/api/stock/products", {
@@ -837,6 +839,7 @@ export async function apiStockPatchProduct(
     isKitchenItem: boolean;
     controlsStock: boolean;
     active: boolean;
+    averageCost: number | null;
   }>,
 ): Promise<ErpProductRow> {
   const res = await fetch(`/api/stock/products/${id}`, {
