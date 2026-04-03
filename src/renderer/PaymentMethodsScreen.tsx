@@ -11,7 +11,9 @@ import {
   type PaymentMethodRow,
 } from "./api";
 import { useAuth } from "./AuthContext";
+import { cn } from "./lib/cn";
 import { Button } from "./ui/Button";
+import { Card, CardContent } from "./ui/Card";
 import { Input } from "./ui/Input";
 import { Table, TBody, Td, Th, THead, Tr } from "./ui/Table";
 
@@ -28,6 +30,12 @@ const KIND_LABEL: Record<PaymentMethodKind, string> = {
   CREDITO: "Crédito",
   VALE: "Vale",
 };
+
+const fieldSelectClass = cn(
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "focus:border-slate-900 focus:ring-2 focus:ring-slate-950/10",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
 
 export function PaymentMethodsScreen() {
   const { state } = useAuth();
@@ -51,6 +59,14 @@ export function PaymentMethodsScreen() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PaymentMethodKind>("DINHEIRO");
   const [feePercentStr, setFeePercentStr] = useState("");
+
+  const tabBtn = (active: boolean) =>
+    cn(
+      "rounded-lg border-l-[3px] px-3 py-2 text-sm font-medium transition-colors",
+      active
+        ? "border-l-blue-600 bg-blue-50 text-blue-900 dark:border-l-blue-500 dark:bg-blue-950/40 dark:text-blue-100"
+        : "border-l-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100",
+    );
 
   const load = useCallback(async () => {
     if (!token) {
@@ -206,50 +222,56 @@ export function PaymentMethodsScreen() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6">
-      <div>
-        <h2 className="text-base font-semibold text-zinc-200">Configurações do PDV</h2>
-        <p className="mt-1 text-sm text-zinc-500">Formas de pagamento e regras comerciais aplicadas aos novos pedidos.</p>
+    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+      <div className="border-b border-slate-200 pb-6 dark:border-zinc-800">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">PDV</p>
+        <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-zinc-50">Configurações</h2>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-zinc-400">
+          Formas de pagamento e regras comerciais (couvert e taxa) aplicadas aos novos pedidos.
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-white/[0.08] pb-2">
-        <button
-          type="button"
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "payments" ? "bg-amber-500/15 text-amber-100" : "text-zinc-500 hover:text-zinc-300"}`}
-          onClick={() => setTab("payments")}
-        >
+      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-3 dark:border-zinc-800">
+        <button type="button" className={tabBtn(tab === "payments")} onClick={() => setTab("payments")}>
           Formas de pagamento
         </button>
-        <button
-          type="button"
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === "commercial" ? "bg-amber-500/15 text-amber-100" : "text-zinc-500 hover:text-zinc-300"}`}
-          onClick={() => setTab("commercial")}
-        >
+        <button type="button" className={tabBtn(tab === "commercial")} onClick={() => setTab("commercial")}>
           Couvert e taxa de serviço
         </button>
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-red-500/30 bg-red-950/40 px-4 py-2 text-sm text-red-200">{error}</p>
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </p>
       ) : null}
 
       {tab === "commercial" ? (
-        <form className="space-y-4 rounded-xl border border-white/[0.08] bg-[#1a1a1a]/60 p-5" onSubmit={(e) => void saveCommercial(e)}>
-          <h3 className="text-sm font-medium text-zinc-300">Padrão para novos pedidos</h3>
-          <p className="text-xs text-zinc-500">
+        <form
+          className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/40 dark:shadow-none"
+          onSubmit={(e) => void saveCommercial(e)}
+        >
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Padrão para novos pedidos</h3>
+          <p className="text-xs text-slate-600 dark:text-zinc-500">
             Percentual incide sobre o subtotal dos itens. Valor fixo em reais. No PDV você pode alterar por pedido antes de
             fechar.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 rounded-lg border border-white/[0.06] p-3">
-              <label className="flex items-center gap-2 text-sm text-zinc-300">
-                <input type="checkbox" checked={cCouvertEn} onChange={(e) => setCCouvertEn(e.target.checked)} disabled={busy} />
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+              <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 dark:border-zinc-600 dark:text-amber-500"
+                  checked={cCouvertEn}
+                  onChange={(e) => setCCouvertEn(e.target.checked)}
+                  disabled={busy}
+                />
                 Couvert ativo por padrão
               </label>
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 Modo
                 <select
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  className={fieldSelectClass}
                   value={cCouvertMode}
                   onChange={(e) => setCCouvertMode(e.target.value as CommercialChargeMode)}
                   disabled={busy}
@@ -266,15 +288,21 @@ export function PaymentMethodsScreen() {
                 disabled={busy}
               />
             </div>
-            <div className="space-y-2 rounded-lg border border-white/[0.06] p-3">
-              <label className="flex items-center gap-2 text-sm text-zinc-300">
-                <input type="checkbox" checked={cServEn} onChange={(e) => setCServEn(e.target.checked)} disabled={busy} />
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+              <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/30 dark:border-zinc-600 dark:text-amber-500"
+                  checked={cServEn}
+                  onChange={(e) => setCServEn(e.target.checked)}
+                  disabled={busy}
+                />
                 Taxa de serviço ativa por padrão
               </label>
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 Modo
                 <select
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  className={fieldSelectClass}
                   value={cServMode}
                   onChange={(e) => setCServMode(e.target.value as CommercialChargeMode)}
                   disabled={busy}
@@ -297,99 +325,128 @@ export function PaymentMethodsScreen() {
               Salvar regras comerciais
             </Button>
           ) : (
-            <p className="text-sm text-zinc-500">Apenas administrador ou gerente pode editar.</p>
+            <p className="text-sm text-slate-500 dark:text-zinc-500">Apenas administrador ou gerente pode editar.</p>
           )}
         </form>
       ) : null}
 
       {tab === "payments" ? (
         <>
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-300">Formas de pagamento</h3>
-        <p className="mt-1 text-sm text-zinc-500">
-          Cadastre bandeiras e meios (ex.: Visa crédito). A taxa % gera o valor líquido no fechamento (útil para conciliar
-          com o extrato da maquininha).
-        </p>
-      </div>
-
-      {canEdit ? (
-        <form className="space-y-4 rounded-xl border border-white/[0.08] bg-[#1a1a1a]/60 p-5" onSubmit={(e) => void onCreate(e)}>
-          <h3 className="text-sm font-medium text-zinc-300">Nova forma</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} disabled={busy} placeholder="Ex.: Visa Crédito" />
-            <label className="flex flex-col gap-1 text-xs text-zinc-500">
-              Tipo
-              <select
-                className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
-                value={kind}
-                onChange={(e) => setKind(e.target.value as PaymentMethodKind)}
-                disabled={busy}
-              >
-                {KINDS.map((k) => (
-                  <option key={k.value} value={k.value}>
-                    {k.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Formas de pagamento</h3>
+            <p className="mt-1 text-sm text-slate-600 dark:text-zinc-500">
+              Cadastre bandeiras e meios (ex.: Visa crédito). A taxa % gera o valor líquido no fechamento (útil para conciliar
+              com o extrato da maquininha).
+            </p>
           </div>
-          <Input
-            label="Taxa % (opcional)"
-            inputMode="decimal"
-            placeholder="Ex.: 3"
-            value={feePercentStr}
-            onChange={(e) => setFeePercentStr(e.target.value.replace(",", "."))}
-            disabled={busy}
-          />
-          <Button type="submit" disabled={busy}>
-            Cadastrar
-          </Button>
-        </form>
-      ) : (
-        <p className="text-sm text-zinc-500">Apenas administrador ou gerente pode cadastrar formas de pagamento.</p>
-      )}
 
-      <Table>
-        <THead>
-          <tr>
-            <Th>Nome</Th>
-            <Th>Tipo</Th>
-            <Th>Taxa</Th>
-            <Th>Status</Th>
-            {canEdit ? <Th /> : null}
-          </tr>
-        </THead>
-        <TBody>
-          {methods.length === 0 ? (
-            <Tr>
-              <Td colSpan={canEdit ? 5 : 4} className="py-8 text-center text-zinc-500">
-                Nenhuma forma cadastrada.
-              </Td>
-            </Tr>
+          {canEdit ? (
+            <form
+              className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/40 dark:shadow-none"
+              onSubmit={(e) => void onCreate(e)}
+            >
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Nova forma</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Nome"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={busy}
+                  placeholder="Ex.: Visa Crédito"
+                />
+                <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600 dark:text-zinc-500">
+                  Tipo
+                  <select
+                    className={fieldSelectClass}
+                    value={kind}
+                    onChange={(e) => setKind(e.target.value as PaymentMethodKind)}
+                    disabled={busy}
+                  >
+                    {KINDS.map((k) => (
+                      <option key={k.value} value={k.value}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <Input
+                label="Taxa % (opcional)"
+                inputMode="decimal"
+                placeholder="Ex.: 3"
+                value={feePercentStr}
+                onChange={(e) => setFeePercentStr(e.target.value.replace(",", "."))}
+                disabled={busy}
+              />
+              <Button type="submit" disabled={busy}>
+                Cadastrar
+              </Button>
+            </form>
           ) : (
-            methods.map((m) => (
-              <Tr key={m.id}>
-                <Td className="font-medium text-zinc-200">{m.name}</Td>
-                <Td className="text-zinc-400">{KIND_LABEL[m.kind]}</Td>
-                <Td className="tabular-nums text-zinc-400">{m.feePercent != null ? `${m.feePercent}%` : "—"}</Td>
-                <Td className={m.active ? "text-emerald-400/90" : "text-zinc-500"}>{m.active ? "Ativa" : "Inativa"}</Td>
-                {canEdit ? (
-                  <Td className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" className="!py-1 text-xs" disabled={busy} onClick={() => void toggleActive(m)}>
-                        {m.active ? "Desativar" : "Ativar"}
-                      </Button>
-                      <Button type="button" variant="danger" className="!py-1 text-xs" disabled={busy} onClick={() => void remove(m)}>
-                        Excluir
-                      </Button>
-                    </div>
-                  </Td>
-                ) : null}
-              </Tr>
-            ))
+            <p className="text-sm text-slate-500 dark:text-zinc-500">Apenas administrador ou gerente pode cadastrar formas de pagamento.</p>
           )}
-        </TBody>
-      </Table>
+
+          <Card>
+            <CardContent className="!p-0">
+              <Table>
+                <THead>
+                  <tr>
+                    <Th>Nome</Th>
+                    <Th>Tipo</Th>
+                    <Th>Taxa</Th>
+                    <Th>Status</Th>
+                    {canEdit ? <Th /> : null}
+                  </tr>
+                </THead>
+                <TBody>
+                  {methods.length === 0 ? (
+                    <Tr>
+                      <Td colSpan={canEdit ? 5 : 4} className="py-8 text-center text-slate-500 dark:text-zinc-500">
+                        Nenhuma forma cadastrada.
+                      </Td>
+                    </Tr>
+                  ) : (
+                    methods.map((m) => (
+                      <Tr key={m.id}>
+                        <Td className="font-medium text-slate-900 dark:text-zinc-200">{m.name}</Td>
+                        <Td className="text-slate-600 dark:text-zinc-400">{KIND_LABEL[m.kind]}</Td>
+                        <Td className="tabular-nums text-slate-600 dark:text-zinc-400">
+                          {m.feePercent != null ? `${m.feePercent}%` : "—"}
+                        </Td>
+                        <Td
+                          className={
+                            m.active
+                              ? "font-medium text-emerald-700 dark:text-emerald-400/90"
+                              : "text-slate-500 dark:text-zinc-500"
+                          }
+                        >
+                          {m.active ? "Ativa" : "Inativa"}
+                        </Td>
+                        {canEdit ? (
+                          <Td className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="!py-1 text-xs"
+                                disabled={busy}
+                                onClick={() => void toggleActive(m)}
+                              >
+                                {m.active ? "Desativar" : "Ativar"}
+                              </Button>
+                              <Button type="button" variant="danger" className="!py-1 text-xs" disabled={busy} onClick={() => void remove(m)}>
+                                Excluir
+                              </Button>
+                            </div>
+                          </Td>
+                        ) : null}
+                      </Tr>
+                    ))
+                  )}
+                </TBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       ) : null}
     </div>

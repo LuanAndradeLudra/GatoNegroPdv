@@ -7,12 +7,31 @@ import {
   type CustomerRow,
 } from "./api";
 import { useAuth } from "./AuthContext";
+import { cn } from "./lib/cn";
 import { Button } from "./ui/Button";
+import { Card, CardContent } from "./ui/Card";
 import { Input } from "./ui/Input";
 import { Table, TBody, Td, Th, THead, Tr } from "./ui/Table";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
+
+const searchInputClass = cn(
+  "w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-amber-500/50 dark:focus:ring-amber-500/25",
+);
+
+const textareaClass = cn(
+  "min-h-0 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "placeholder:text-slate-400 focus:border-slate-900 focus:ring-[3px] focus:ring-slate-950/5",
+  "dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
+
+const dateInputClass = cn(
+  "rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100",
+);
 
 export function CustomersScreen() {
   const { state } = useAuth();
@@ -151,11 +170,19 @@ export function CustomersScreen() {
   }
 
   return (
-    <div className="space-y-4 px-4 pb-8 pt-2 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
+      <div className="border-b border-slate-200 pb-6 dark:border-zinc-800">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Cadastros</p>
+        <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-zinc-50">Clientes</h2>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-zinc-400">
+          Busque por nome, telefone ou documento. Use &quot;Comandas&quot; para ver pedidos fechados vinculados ao cliente.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <input
           type="search"
-          className="w-full max-w-md rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
+          className={searchInputClass}
           placeholder="Buscar por nome, telefone ou documento…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -165,62 +192,72 @@ export function CustomersScreen() {
         </Button>
       </div>
 
-      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </p>
+      ) : null}
 
-      <Table>
-        <THead>
-          <tr>
-            <Th>Nome</Th>
-            <Th>Telefone</Th>
-            <Th>Documento</Th>
-            <Th className="text-right">Ações</Th>
-          </tr>
-        </THead>
-        <TBody>
-          {list.map((c) => (
-            <Tr key={c.id}>
-              <Td className="font-medium text-zinc-200">{c.name}</Td>
-              <Td className="font-mono text-xs text-zinc-400">{c.phone ?? "—"}</Td>
-              <Td className="font-mono text-xs text-zinc-400">{c.document ?? "—"}</Td>
-              <Td className="text-right">
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-amber-400/90 hover:text-amber-300"
-                    onClick={() => openEdit(c)}
-                    disabled={busy}
-                  >
-                    Editar
-                  </button>
-                  {canReport ? (
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-amber-400/90 hover:text-amber-300"
-                      onClick={() => void openReport(c)}
-                      disabled={busy}
-                    >
-                      Comandas
-                    </button>
-                  ) : null}
-                </div>
-              </Td>
-            </Tr>
-          ))}
-        </TBody>
-      </Table>
+      <Card>
+        <CardContent className="!p-0">
+          <Table>
+            <THead>
+              <tr>
+                <Th>Nome</Th>
+                <Th>Telefone</Th>
+                <Th>Documento</Th>
+                <Th className="text-right">Ações</Th>
+              </tr>
+            </THead>
+            <TBody>
+              {list.map((c) => (
+                <Tr key={c.id}>
+                  <Td className="font-medium text-slate-900 dark:text-zinc-100">{c.name}</Td>
+                  <Td className="font-mono text-xs text-slate-600 dark:text-zinc-400">{c.phone ?? "—"}</Td>
+                  <Td className="font-mono text-xs text-slate-600 dark:text-zinc-400">{c.document ?? "—"}</Td>
+                  <Td className="text-right">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-blue-700 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        onClick={() => openEdit(c)}
+                        disabled={busy}
+                      >
+                        Editar
+                      </button>
+                      {canReport ? (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-violet-700 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300"
+                          onClick={() => void openReport(c)}
+                          disabled={busy}
+                        >
+                          Comandas
+                        </button>
+                      ) : null}
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {modal ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
           role="presentation"
           onClick={() => setModal(null)}
         >
           <div
-            className="my-8 w-full max-w-md rounded-xl border border-white/[0.1] bg-[#1e1e1e]/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="my-8 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
             role="dialog"
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-zinc-100">{modal === "create" ? "Novo cliente" : "Editar cliente"}</h2>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">
+              {modal === "create" ? "Novo cliente" : "Editar cliente"}
+            </h2>
             <form className="mt-4 flex flex-col gap-3" onSubmit={(e) => void onSubmit(e)}>
               <Input label="Nome *" value={formName} onChange={(e) => setFormName(e.target.value)} required disabled={busy} />
               <Input label="Telefone" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} disabled={busy} />
@@ -232,18 +269,20 @@ export function CustomersScreen() {
                 onChange={(e) => setFormEmail(e.target.value)}
                 disabled={busy}
               />
-              <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 Observações
                 <textarea
                   rows={3}
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
                   disabled={busy}
-                  className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
+                  className={textareaClass}
                 />
               </label>
-              {formError ? <p className="text-sm text-red-400">{formError}</p> : null}
-              <div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4">
+              {formError ? (
+                <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
+              ) : null}
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-zinc-700">
                 <Button type="button" variant="outline" onClick={() => setModal(null)} disabled={busy}>
                   Cancelar
                 </Button>
@@ -258,35 +297,27 @@ export function CustomersScreen() {
 
       {reportFor && canReport ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
           role="presentation"
           onClick={() => setReportFor(null)}
         >
           <div
-            className="my-8 w-full max-w-3xl rounded-xl border border-white/[0.1] bg-[#1e1e1e]/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="my-8 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
             role="dialog"
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-zinc-100">Comandas — {reportFor.name}</h2>
-            <p className="mt-1 text-sm text-zinc-500">Comandas fechadas no período (vínculo por cliente cadastrado).</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">Comandas — {reportFor.name}</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-zinc-400">
+              Comandas fechadas no período (vínculo por cliente cadastrado).
+            </p>
             <div className="mt-4 flex flex-wrap items-end gap-4">
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 De
-                <input
-                  type="date"
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
-                  value={repFrom}
-                  onChange={(e) => setRepFrom(e.target.value)}
-                />
+                <input type="date" className={dateInputClass} value={repFrom} onChange={(e) => setRepFrom(e.target.value)} />
               </label>
-              <label className="flex flex-col gap-1 text-xs text-zinc-500">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600 dark:text-zinc-500">
                 Até
-                <input
-                  type="date"
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
-                  value={repTo}
-                  onChange={(e) => setRepTo(e.target.value)}
-                />
+                <input type="date" className={dateInputClass} value={repTo} onChange={(e) => setRepTo(e.target.value)} />
               </label>
               <Button type="button" onClick={() => void loadReport()} disabled={reportLoading}>
                 {reportLoading ? "Carregando…" : "Gerar"}
@@ -294,14 +325,15 @@ export function CustomersScreen() {
             </div>
             {reportData ? (
               <>
-                <p className="mt-4 text-sm text-zinc-300">
-                  Total no período: <strong className="text-amber-200/90">{money.format(reportData.total)}</strong> (
+                <p className="mt-4 text-sm text-slate-700 dark:text-zinc-300">
+                  Total no período:{" "}
+                  <strong className="text-amber-800 dark:text-amber-200/90">{money.format(reportData.total)}</strong> (
                   {reportData.orders.length} comandas)
                 </p>
-                <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-white/[0.08]">
+                <div className="mt-3 max-h-80 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-700">
                   <table className="w-full border-collapse text-sm">
-                    <thead className="sticky top-0 bg-[#1a1a1a]">
-                      <tr className="border-b border-white/[0.08] text-left text-[11px] uppercase text-zinc-500">
+                    <thead className="sticky top-0 bg-slate-50 dark:bg-zinc-800">
+                      <tr className="border-b border-slate-200 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-zinc-700 dark:text-zinc-400">
                         <th className="px-3 py-2">Fechamento</th>
                         <th className="px-3 py-2">Total</th>
                         <th className="px-3 py-2">Mesa / obs.</th>
@@ -309,10 +341,17 @@ export function CustomersScreen() {
                     </thead>
                     <tbody>
                       {reportData.orders.map((o) => (
-                        <tr key={o.id} className="border-b border-white/[0.05] hover:bg-white/[0.03]">
-                          <td className="px-3 py-2 text-zinc-400">{o.closedAt ? dt.format(new Date(o.closedAt)) : "—"}</td>
-                          <td className="px-3 py-2 tabular-nums">{money.format(o.totalDue)}</td>
-                          <td className="px-3 py-2 text-zinc-400">{o.clientName ?? "—"}</td>
+                        <tr
+                          key={o.id}
+                          className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+                        >
+                          <td className="px-3 py-2 text-slate-600 dark:text-zinc-400">
+                            {o.closedAt ? dt.format(new Date(o.closedAt)) : "—"}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums font-medium text-slate-900 dark:text-zinc-100">
+                            {money.format(o.totalDue)}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 dark:text-zinc-400">{o.clientName ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -320,7 +359,7 @@ export function CustomersScreen() {
                 </div>
               </>
             ) : null}
-            <div className="mt-6 flex justify-end border-t border-white/[0.08] pt-4">
+            <div className="mt-6 flex justify-end border-t border-slate-200 pt-4 dark:border-zinc-700">
               <Button type="button" variant="outline" onClick={() => setReportFor(null)}>
                 Fechar
               </Button>
