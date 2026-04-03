@@ -495,3 +495,255 @@ input {
 .cash-history-table td {
   white-space: nowrap;
 }
+
+.pdv-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.pdv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pdv-toolbar-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdv-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pdv-main-title {
+  flex: 1;
+  margin: 0;
+}
+
+.pdv-banner {
+  margin: 0.5rem 1.25rem 0;
+}
+
+.pdv-split {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 360px);
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .pdv-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pdv-panel {
+  padding: 1rem;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+
+.pdv-search {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #12141a;
+  color: var(--text);
+}
+
+.pdv-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.65rem;
+}
+
+.pdv-product-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font-size: 0.9rem;
+  transition: border-color 0.15s;
+}
+
+.pdv-product-card:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+}
+
+.pdv-product-name {
+  font-weight: 600;
+}
+
+.pdv-product-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pdv-cart {
+  padding: 1rem;
+  background: #12141a;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+
+.pdv-cart-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.pdv-cart-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.pdv-cart-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+
+.pdv-cart-line-price {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.pdv-qty-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  vertical-align: middle;
+}
+
+.pdv-qty-btn {
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1;
+}
+
+.pdv-qty-val {
+  min-width: 2rem;
+  text-align: center;
+  display: inline-block;
+}
+
+.pdv-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 1.1rem;
+}
+
+.pdv-finalize {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.pdv-menu {
+  padding: 1.25rem 1.5rem 2rem;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.pdv-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.pdv-mode-card {
+  padding: 1.25rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+  color: var(--text);
+}
+
+.pdv-mode-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.pdv-mode-card p {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.pdv-comanda-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pdv-comanda-form input {
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #12141a;
+  color: var(--text);
+}
+
+.pdv-open-comandas h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.pdv-comanda-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pdv-chip {
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #12141a;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.pdv-chip:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+}

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { CashRegisterScreen } from "./CashRegisterScreen";
 import { useAuth } from "./AuthContext";
+import { PdvScreen } from "./PdvScreen";
 import { UsersScreen } from "./UsersScreen";
 
 export function HubScreen() {
   const { state, logout } = useAuth();
-  const [view, setView] = useState<"hub" | "users" | "caixa">("hub");
+  const [view, setView] = useState<"hub" | "users" | "caixa" | "pdv">("hub");
 
   if (state.status !== "authenticated") {
     return null;
@@ -20,6 +21,10 @@ export function HubScreen() {
 
   if (view === "caixa" && access.pdv) {
     return <CashRegisterScreen onBack={() => setView("hub")} />;
+  }
+
+  if (view === "pdv" && access.pdv) {
+    return <PdvScreen onBack={() => setView("hub")} />;
   }
 
   return (
@@ -57,6 +62,7 @@ export function HubScreen() {
             className="hub-tile"
             disabled={!access.pdv}
             title={!access.pdv ? "Sem permissão para o PDV" : undefined}
+            onClick={() => access.pdv && setView("pdv")}
           >
             Entrar no PDV
           </button>

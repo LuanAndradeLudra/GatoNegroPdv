@@ -191,3 +191,137 @@ export async function apiCashClose(token: string, closingBalance?: number | null
   const data = await parseJson<{ session: CashSession }>(res);
   return data.session;
 }
+
+export type PdvProduct = {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  productType: "GELADO" | "QUENTE";
+  isKitchenItem: boolean;
+  controlsStock: boolean;
+  active: boolean;
+};
+
+export type PdvOrderItem = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  isKitchenItem: boolean;
+  kitchenStatus: string | null;
+};
+
+export type PdvOrder = {
+  id: string;
+  kind: "DIRECT" | "COMANDA";
+  clientName: string | null;
+  status: "OPEN" | "CLOSED" | "CANCELLED";
+  openedAt: string;
+  closedAt: string | null;
+  createdBy: { id: string; name: string; login: string };
+  items: PdvOrderItem[];
+  subtotal: number;
+};
+
+export async function apiPdvProducts(token: string): Promise<PdvProduct[]> {
+  const res = await fetch("/api/pdv/products", { headers: authHeaders(token) });
+  const data = await parseJson<{ products: PdvProduct[] }>(res);
+  return data.products;
+}
+
+export async function apiPdvOrders(
+  token: string,
+  q?: { status?: PdvOrder["status"]; kind?: PdvOrder["kind"] },
+): Promise<PdvOrder[]> {
+  const params = new URLSearchParams();
+  if (q?.status) {
+    params.set("status", q.status);
+  }
+  if (q?.kind) {
+    params.set("kind", q.kind);
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/pdv/orders${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ orders: PdvOrder[] }>(res);
+  return data.orders;
+}
+
+export async function apiPdvOrder(token: string, id: string): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${id}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvCreateOrder(
+  token: string,
+  body: { kind: "DIRECT" | "COMANDA"; clientName?: string | null },
+): Promise<PdvOrder> {
+  const res = await fetch("/api/pdv/orders", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvAddItem(
+  token: string,
+  orderId: string,
+  productId: string,
+  quantity: number,
+): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/items`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ productId, quantity }),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvUpdateItemQty(
+  token: string,
+  orderId: string,
+  itemId: string,
+  quantity: number,
+): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ quantity }),
+  });
+  const data = await parseJson<{ order: PdvOrder | null }>(res);
+  if (!data.order) {
+    throw new Error("Pedido não retornado");
+  }
+  return data.order;
+}
+
+export async function apiPdvRemoveItem(
+  token: string,
+  orderId: string,
+  itemId: string,
+): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/items/${itemId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  const data = await parseJson<{ order: PdvOrder | null }>(res);
+  if (!data.order) {
+    throw new Error("Pedido não retornado");
+  }
+  return data.order;
+}
+
+export async function apiPdvCloseOrder(token: string, orderId: string): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/close`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
