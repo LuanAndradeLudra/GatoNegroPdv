@@ -5,6 +5,7 @@ import {
   type CashSession,
 } from "../api";
 import { Button } from "../ui/Button";
+import { cn } from "../lib/cn";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -98,9 +99,12 @@ export function CashSessionDetailModal({
     return null;
   }
 
+  const muted = "text-slate-500 dark:text-zinc-500";
+  const dtLabel = "text-[11px] font-semibold uppercase text-slate-500 dark:text-zinc-500";
+
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
       role="presentation"
       onClick={() => onClose()}
     >
@@ -108,11 +112,11 @@ export function CashSessionDetailModal({
         role="dialog"
         aria-modal
         aria-labelledby="cash-session-detail-title"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/[0.1] bg-[#1e1e1e]/98 p-6 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-white/[0.08] pb-4">
-          <h3 id="cash-session-detail-title" className="text-lg font-semibold text-zinc-100">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4 dark:border-zinc-700">
+          <h3 id="cash-session-detail-title" className="text-lg font-semibold text-slate-900 dark:text-zinc-100">
             Detalhe da sessão
           </h3>
           <Button type="button" variant="outline" className="shrink-0 !py-1.5 text-xs" onClick={onClose}>
@@ -121,43 +125,43 @@ export function CashSessionDetailModal({
         </div>
 
         {detailLoading ? (
-          <p className="mt-6 text-sm text-zinc-500">Carregando…</p>
+          <p className={cn("mt-6 text-sm", muted)}>Carregando…</p>
         ) : detailError ? (
-          <p className="mt-6 text-sm text-red-300">{detailError}</p>
+          <p className="mt-6 text-sm text-red-600 dark:text-red-400">{detailError}</p>
         ) : detailPayload ? (
           <div className="mt-5 space-y-5 text-sm">
-            <dl className="grid gap-3 text-zinc-400 sm:grid-cols-2">
+            <dl className="grid gap-3 text-slate-600 sm:grid-cols-2 dark:text-zinc-300">
               <div>
-                <dt className="text-[11px] uppercase text-zinc-500">Abertura</dt>
-                <dd className="text-zinc-200">{dt.format(new Date(detailPayload.session.openedAt))}</dd>
+                <dt className={dtLabel}>Abertura</dt>
+                <dd className="font-medium text-slate-900 dark:text-zinc-100">{dt.format(new Date(detailPayload.session.openedAt))}</dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase text-zinc-500">Fechamento</dt>
-                <dd className="text-zinc-200">
+                <dt className={dtLabel}>Fechamento</dt>
+                <dd className="font-medium text-slate-900 dark:text-zinc-100">
                   {detailPayload.session.closedAt
                     ? dt.format(new Date(detailPayload.session.closedAt))
                     : "— (turno ainda aberto)"}
                 </dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase text-zinc-500">Turno</dt>
-                <dd className="text-zinc-200">{shiftLabel(detailPayload.session)}</dd>
+                <dt className={dtLabel}>Turno</dt>
+                <dd className="font-medium text-slate-900 dark:text-zinc-100">{shiftLabel(detailPayload.session)}</dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase text-zinc-500">Fundo inicial</dt>
-                <dd className="tabular-nums text-amber-200/90">{money.format(detailPayload.session.initialValue)}</dd>
+                <dt className={dtLabel}>Fundo inicial</dt>
+                <dd className="tabular-nums font-semibold text-amber-700 dark:text-amber-300">{money.format(detailPayload.session.initialValue)}</dd>
               </div>
               <div>
-                <dt className="text-[11px] uppercase text-zinc-500">Valor contado</dt>
-                <dd className="tabular-nums text-zinc-200">
+                <dt className={dtLabel}>Valor contado</dt>
+                <dd className="tabular-nums font-medium text-slate-900 dark:text-zinc-200">
                   {detailPayload.session.closingBalance != null
                     ? money.format(detailPayload.session.closingBalance)
                     : "—"}
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-[11px] uppercase text-zinc-500">Aberto por / Fechado por</dt>
-                <dd className="text-zinc-200">
+                <dt className={dtLabel}>Aberto por / Fechado por</dt>
+                <dd className="font-medium text-slate-900 dark:text-zinc-100">
                   {detailPayload.session.openedBy.name}
                   {" · "}
                   {detailPayload.session.closedBy?.name ?? "—"}
@@ -166,50 +170,47 @@ export function CashSessionDetailModal({
             </dl>
 
             {detailPayload.session.openingNotes ? (
-              <p className="rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-zinc-400">
-                <span className="text-[11px] uppercase text-zinc-500">Obs. abertura</span>
+              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-zinc-500">Obs. abertura</span>
                 <br />
                 {detailPayload.session.openingNotes}
               </p>
             ) : null}
 
-            <p className="font-mono text-[11px] text-zinc-600">ID: {detailPayload.session.id}</p>
+            <p className="font-mono text-[11px] text-slate-400 dark:text-zinc-600">ID: {detailPayload.session.id}</p>
 
             {detailTotals ? (
-              <div className="flex flex-wrap gap-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+              <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/40">
                 <div>
-                  <p className="text-[11px] uppercase text-zinc-500">Total sangrias</p>
-                  <p className="tabular-nums text-rose-300/90">{money.format(detailTotals.sangria)}</p>
+                  <p className={dtLabel}>Total sangrias</p>
+                  <p className="tabular-nums font-semibold text-rose-700 dark:text-rose-300">{money.format(detailTotals.sangria)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase text-zinc-500">Total suprimentos</p>
-                  <p className="tabular-nums text-sky-300/90">{money.format(detailTotals.suprimento)}</p>
+                  <p className={dtLabel}>Total suprimentos</p>
+                  <p className="tabular-nums font-semibold text-sky-700 dark:text-sky-300">{money.format(detailTotals.suprimento)}</p>
                 </div>
               </div>
             ) : null}
 
             <div>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
                 Sangrias e suprimentos
               </h4>
               {detailPayload.movements.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-white/[0.1] px-3 py-4 text-center text-xs text-zinc-500">
+                <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-zinc-700 dark:text-zinc-500">
                   Nenhuma movimentação registrada neste turno.
                 </p>
               ) : (
-                <ul className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-white/[0.06] p-3">
+                <ul className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50 p-3 dark:border-zinc-700 dark:bg-zinc-800/30">
                   {detailPayload.movements.map((m) => (
-                    <li
-                      key={m.id}
-                      className="border-b border-white/[0.05] pb-2 text-xs last:border-0 last:pb-0"
-                    >
-                      <span className={m.type === "SANGRIA" ? "text-rose-300/90" : "text-sky-300/90"}>
+                    <li key={m.id} className="border-b border-slate-100 pb-2 text-xs last:border-0 last:pb-0 dark:border-zinc-700">
+                      <span className={m.type === "SANGRIA" ? "font-medium text-rose-700 dark:text-rose-300" : "font-medium text-sky-700 dark:text-sky-300"}>
                         {m.type === "SANGRIA" ? "Sangria" : "Suprimento"} · {money.format(m.amount)}
                       </span>
-                      <span className="ml-2 text-zinc-500">
+                      <span className={cn("ml-2", muted)}>
                         {dt.format(new Date(m.createdAt))} · {m.createdBy.name}
                       </span>
-                      {m.note ? <p className="mt-1 text-zinc-500">{m.note}</p> : null}
+                      {m.note ? <p className={cn("mt-1", muted)}>{m.note}</p> : null}
                     </li>
                   ))}
                 </ul>

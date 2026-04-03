@@ -17,6 +17,7 @@ import { DenominationModal } from "./components/DenominationModal";
 import { useAuth } from "./AuthContext";
 import { formatDigitsAsBRL, parseDigitsToReais } from "./lib/moneyInput";
 import { reaisToCentDigits, sumDenominationMap } from "./lib/brlDenominations";
+import { cn } from "./lib/cn";
 import { Button } from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { Input } from "./ui/Input";
@@ -35,6 +36,20 @@ const SHIFTS: { value: CashShift; label: string }[] = [
   { value: "NOITE", label: "Noite" },
   { value: "CUSTOM", label: "Personalizado" },
 ];
+
+/** Textarea alinhada ao Input (light + dark). */
+const textareaClass = cn(
+  "min-h-0 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "placeholder:text-slate-400 focus:border-slate-900 focus:ring-[3px] focus:ring-slate-950/5",
+  "disabled:cursor-not-allowed disabled:opacity-50",
+  "dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
+
+const selectClass = cn(
+  "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition-colors",
+  "focus:border-slate-900 focus:ring-[3px] focus:ring-slate-950/5 disabled:cursor-not-allowed disabled:opacity-50",
+  "dark:border-zinc-600 dark:bg-zinc-900/80 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
 
 function hasVendas(user: User, action: "abrir" | "fechar"): boolean {
   return user.permissions.VENDAS.includes(action);
@@ -228,345 +243,352 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
   const canClose = hasVendas(user, "fechar");
   const canMove = canOpen;
 
+  const muted = "text-slate-500 dark:text-zinc-500";
+  const labelUpper = "text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500";
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-8 px-5 py-8">
       {error ? (
-        <p className="rounded-lg border border-red-500/30 bg-red-950/40 px-4 py-2 text-sm text-red-200">{error}</p>
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+          {error}
+        </p>
       ) : null}
 
       {current === undefined ? (
-        <p className="py-16 text-center text-sm text-zinc-500">Carregando…</p>
+        <p className={cn("py-16 text-center text-sm", muted)}>Carregando…</p>
       ) : (
         <>
           {current ? (
-        <section className="space-y-6">
-          <Card className="overflow-hidden border-emerald-500/15 bg-[#1e1e1e]/90 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle>Turno aberto</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 !pt-0 text-sm">
-              <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-emerald-100/90">
-                <span className="font-medium">Aberto</span> em {dt.format(new Date(current.openedAt))} · Turno:{" "}
-                <span className="text-emerald-50">{shiftLabel(current)}</span>
-              </p>
-              <p className="text-zinc-400">
-                Operador: <span className="text-zinc-200">{current.openedBy.name}</span> ({current.openedBy.login})
-              </p>
-              <p className="text-zinc-300">
-                Fundo inicial:{" "}
-                <span className="font-semibold tabular-nums text-amber-200/90">{money.format(current.initialValue)}</span>
-              </p>
-              {current.openingNotes ? (
-                <p className="rounded-md border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-zinc-400">
-                  <span className="text-[11px] uppercase text-zinc-500">Obs. abertura</span>
-                  <br />
-                  {current.openingNotes}
-                </p>
-              ) : null}
-              <p className="font-mono text-[11px] text-zinc-500">Sessão ID: {current.id}</p>
-            </CardContent>
-          </Card>
-
-          {canMove ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-white/[0.08] bg-[#1a1a1a]/80 backdrop-blur-sm">
-                <CardHeader className="!py-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <ArrowDownCircle className="h-5 w-5 text-rose-400/90" strokeWidth={1.75} />
-                    Sangria (retirada)
-                  </CardTitle>
+            <section className="space-y-6">
+              <Card className="overflow-hidden border-emerald-200/90 bg-emerald-50/40 dark:border-emerald-900/45 dark:bg-emerald-950/25">
+                <CardHeader>
+                  <CardTitle>Turno aberto</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 !pt-0">
-                  <p className="text-xs text-zinc-500">Retirada de numerário do caixa (ex.: pagamento ou cofre).</p>
-                  <Input
-                    label="Valor"
-                    inputMode="numeric"
-                    value={formatDigitsAsBRL(sangriaDigits)}
-                    onChange={(e) => setSangriaDigits(e.target.value.replace(/\D/g, ""))}
-                    disabled={busy}
-                  />
-                  <label className="flex flex-col gap-1 text-xs text-zinc-500">
-                    Observação
-                    <textarea
-                      rows={2}
-                      className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
-                      value={sangriaNote}
-                      onChange={(e) => setSangriaNote(e.target.value)}
-                      disabled={busy}
-                      placeholder="Opcional"
-                    />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    className="w-full"
-                    disabled={busy}
-                    onClick={() =>
-                      void submitMovement("SANGRIA", sangriaDigits, sangriaNote, () => {
-                        setSangriaDigits("");
-                        setSangriaNote("");
-                      })
-                    }
-                  >
-                    Registrar sangria
-                  </Button>
+                <CardContent className="space-y-3 !pt-0 text-sm">
+                  <p className="rounded-lg border border-emerald-200 bg-white/80 mt-4 px-3 py-2 text-emerald-900 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-100">
+                    <span className="font-semibold">Aberto</span> em {dt.format(new Date(current.openedAt))} · Turno:{" "}
+                    <span className="text-emerald-800 dark:text-emerald-200">{shiftLabel(current)}</span>
+                  </p>
+                  <p className={cn(muted)}>
+                    Operador: <span className="font-medium text-slate-800 dark:text-zinc-200">{current.openedBy.name}</span> (
+                    {current.openedBy.login})
+                  </p>
+                  <p className="text-slate-700 dark:text-zinc-300">
+                    Fundo inicial:{" "}
+                    <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-300">{money.format(current.initialValue)}</span>
+                  </p>
+                  {current.openingNotes ? (
+                    <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300">
+                      <span className="text-[11px] font-medium uppercase text-slate-500 dark:text-zinc-500">Obs. abertura</span>
+                      <br />
+                      {current.openingNotes}
+                    </p>
+                  ) : null}
+                  <p className="font-mono text-[11px] text-slate-400 dark:text-zinc-600">Sessão ID: {current.id}</p>
                 </CardContent>
               </Card>
-              <Card className="border-white/[0.08] bg-[#1a1a1a]/80 backdrop-blur-sm">
-                <CardHeader className="!py-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <ArrowUpCircle className="h-5 w-5 text-sky-400/90" strokeWidth={1.75} />
-                    Suprimento (entrada)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 !pt-0">
-                  <p className="text-xs text-zinc-500">Entrada de troco ou reforço no caixa durante o turno.</p>
-                  <Input
-                    label="Valor"
-                    inputMode="numeric"
-                    value={formatDigitsAsBRL(supDigits)}
-                    onChange={(e) => setSupDigits(e.target.value.replace(/\D/g, ""))}
-                    disabled={busy}
-                  />
-                  <label className="flex flex-col gap-1 text-xs text-zinc-500">
-                    Observação
-                    <textarea
-                      rows={2}
-                      className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
-                      value={supNote}
-                      onChange={(e) => setSupNote(e.target.value)}
-                      disabled={busy}
-                      placeholder="Opcional"
-                    />
-                  </label>
-                  <Button
-                    type="button"
-                    className="w-full"
-                    disabled={busy}
-                    onClick={() =>
-                      void submitMovement("SUPRIMENTO", supDigits, supNote, () => {
-                        setSupDigits("");
-                        setSupNote("");
-                      })
-                    }
-                  >
-                    Registrar suprimento
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          ) : null}
 
-          {movements.length > 0 ? (
-            <Card>
-              <CardHeader className="!py-3">
-                <CardTitle className="text-base">Movimentações do turno</CardTitle>
-              </CardHeader>
-              <CardContent className="!pt-0">
-                <ul className="max-h-48 space-y-2 overflow-y-auto text-sm">
-                  {movements.map((m) => (
-                    <li
-                      key={m.id}
-                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/[0.05] py-2 last:border-0"
-                    >
-                      <span className={m.type === "SANGRIA" ? "text-rose-300/90" : "text-sky-300/90"}>
-                        {m.type === "SANGRIA" ? "Sangria" : "Suprimento"} · {money.format(m.amount)}
-                      </span>
-                      <span className="text-[11px] text-zinc-500">
-                        {dt.format(new Date(m.createdAt))} · {m.createdBy.name}
-                      </span>
-                      {m.note ? <p className="w-full text-xs text-zinc-500">{m.note}</p> : null}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {canClose ? (
-            <Card>
-              <CardHeader className="!py-3">
-                <CardTitle className="text-base">Fechar turno</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-3" onSubmit={(e) => void onClose(e)}>
-                  <Input
-                    label="Valor contado no fechamento (opcional)"
-                    inputMode="numeric"
-                    placeholder="0,00"
-                    autoComplete="off"
-                    value={formatDigitsAsBRL(closeDigits)}
-                    onChange={(e) => setCloseDigits(e.target.value.replace(/\D/g, ""))}
-                    disabled={busy}
-                  />
-                  <Button type="submit" className="w-full" variant="outline" disabled={busy}>
-                    {busy ? "Fechando…" : "Fechar caixa"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          ) : (
-            <p className="text-xs text-zinc-500">Sem permissão para fechar o caixa.</p>
-          )}
-        </section>
-      ) : (
-        <section className="mx-auto max-w-xl">
-          {canOpen ? (
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-gradient-to-b from-[#232323]/95 to-[#1a1a1a]/95 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(201,162,39,0.08),transparent_55%)]" />
-              <div className="relative">
-                <div className="mb-2 flex items-center gap-2 text-amber-200/90">
-                  <Banknote className="h-6 w-6" strokeWidth={1.5} />
-                  <h2 className="text-lg font-semibold text-zinc-100">Abertura de caixa</h2>
+              {canMove ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card className="border-rose-100 dark:border-rose-900/35">
+                    <CardHeader className="!py-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ArrowDownCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" strokeWidth={1.75} />
+                        Sangria (retirada)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 !pt-0 mt-4">
+                      <p className={cn("text-xs", muted)}>Retirada de numerário do caixa (ex.: pagamento ou cofre).</p>
+                      <Input
+                        label="Valor"
+                        inputMode="numeric"
+                        value={formatDigitsAsBRL(sangriaDigits)}
+                        onChange={(e) => setSangriaDigits(e.target.value.replace(/\D/g, ""))}
+                        disabled={busy}
+                      />
+                      <label className={cn("flex flex-col gap-1 text-xs font-medium", muted)}>
+                        Observação
+                        <textarea
+                          rows={2}
+                          className={textareaClass}
+                          value={sangriaNote}
+                          onChange={(e) => setSangriaNote(e.target.value)}
+                          disabled={busy}
+                          placeholder="Opcional"
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        className="w-full"
+                        disabled={busy}
+                        onClick={() =>
+                          void submitMovement("SANGRIA", sangriaDigits, sangriaNote, () => {
+                            setSangriaDigits("");
+                            setSangriaNote("");
+                          })
+                        }
+                      >
+                        Registrar sangria
+                      </Button>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-sky-100 dark:border-sky-900/35">
+                    <CardHeader className="!py-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <ArrowUpCircle className="h-5 w-5 text-sky-600 dark:text-sky-400" strokeWidth={1.75} />
+                        Suprimento (entrada)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 !pt-0 mt-4">
+                      <p className={cn("text-xs", muted)}>Entrada de troco ou reforço no caixa durante o turno.</p>
+                      <Input
+                        label="Valor"
+                        inputMode="numeric"
+                        value={formatDigitsAsBRL(supDigits)}
+                        onChange={(e) => setSupDigits(e.target.value.replace(/\D/g, ""))}
+                        disabled={busy}
+                      />
+                      <label className={cn("flex flex-col gap-1 text-xs font-medium", muted)}>
+                        Observação
+                        <textarea
+                          rows={2}
+                          className={textareaClass}
+                          value={supNote}
+                          onChange={(e) => setSupNote(e.target.value)}
+                          disabled={busy}
+                          placeholder="Opcional"
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={busy}
+                        onClick={() =>
+                          void submitMovement("SUPRIMENTO", supDigits, supNote, () => {
+                            setSupDigits("");
+                            setSupNote("");
+                          })
+                        }
+                      >
+                        Registrar suprimento
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
-                <p className="text-sm text-zinc-500">
-                  Informe o fundo de troco, o turno e observações. Opcionalmente use a conferência de cédulas para conferência
-                  detalhada.
-                </p>
-                <Button type="button" className="mt-6 w-full" onClick={() => setOpenModal(true)} disabled={busy}>
-                  Iniciar formulário de abertura
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <p className="text-center text-sm text-zinc-500">Sem permissão para abrir o caixa.</p>
-          )}
-        </section>
-      )}
+              ) : null}
 
-      <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Últimos fechamentos (referência)</h2>
-        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#1a1a1a]/50">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-white/[0.08] bg-white/[0.03] text-left text-[11px] uppercase text-zinc-500">
-                <th className="px-3 py-2">Fechamento</th>
-                <th className="px-3 py-2">Inicial</th>
-                <th className="px-3 py-2">Contado</th>
-                <th className="px-3 py-2">Operador</th>
-                <th className="px-3 py-2 text-right"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {lastFiveClosed.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
-                    Nenhum histórico fechado ainda.
-                  </td>
-                </tr>
+              {movements.length > 0 ? (
+                <Card>
+                  <CardHeader className="!py-3">
+                    <CardTitle className="text-base">Movimentações do turno</CardTitle>
+                  </CardHeader>
+                  <CardContent className="!pt-0">
+                    <ul className="max-h-48 space-y-2 overflow-y-auto text-sm">
+                      {movements.map((m) => (
+                        <li
+                          key={m.id}
+                          className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 py-2 last:border-0 dark:border-zinc-800"
+                        >
+                          <span
+                            className={
+                              m.type === "SANGRIA"
+                                ? "font-medium text-rose-700 dark:text-rose-300"
+                                : "font-medium text-sky-700 dark:text-sky-300"
+                            }
+                          >
+                            {m.type === "SANGRIA" ? "Sangria" : "Suprimento"} · {money.format(m.amount)}
+                          </span>
+                          <span className={cn("text-[11px]", muted)}>
+                            {dt.format(new Date(m.createdAt))} · {m.createdBy.name}
+                          </span>
+                          {m.note ? <p className={cn("w-full text-xs", muted)}>{m.note}</p> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {canClose ? (
+                <Card>
+                  <CardHeader className="!py-3">
+                    <CardTitle className="text-base">Fechar turno</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-3 mt-4" onSubmit={(e) => void onClose(e)}>
+                      <Input
+                        label="Valor contado no fechamento (opcional)"
+                        inputMode="numeric"
+                        placeholder="0,00"
+                        autoComplete="off"
+                        value={formatDigitsAsBRL(closeDigits)}
+                        onChange={(e) => setCloseDigits(e.target.value.replace(/\D/g, ""))}
+                        disabled={busy}
+                      />
+                      <Button type="submit" className="w-full" variant="outline" disabled={busy}>
+                        {busy ? "Fechando…" : "Fechar caixa"}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
               ) : (
-                lastFiveClosed.map((s) => (
-                  <tr
-                    key={s.id}
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer border-b border-white/[0.05] hover:bg-white/[0.06]"
-                    onClick={() => setDetailSessionId(s.id)}
-                    onKeyDown={(e) => onSessionRowKey(e, s.id)}
-                  >
-                    <td className="whitespace-nowrap px-3 py-2 text-zinc-400">
-                      {s.closedAt ? dt.format(new Date(s.closedAt)) : "—"}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">{money.format(s.initialValue)}</td>
-                    <td className="px-3 py-2 tabular-nums text-zinc-400">
-                      {s.closingBalance != null ? money.format(s.closingBalance) : "—"}
-                    </td>
-                    <td className="max-w-[120px] truncate px-3 py-2 text-zinc-500">{s.openedBy.name}</td>
-                    <td className="px-3 py-2 text-right">
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-400/90">
-                        <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-                        Detalhes
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                <p className={cn("text-xs", muted)}>Sem permissão para fechar o caixa.</p>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </section>
+          ) : (
+            <section className="mx-auto max-w-xl">
+              {canOpen ? (
+                <Card className="relative overflow-hidden border-slate-200/90 p-8 shadow-md dark:border-zinc-700 dark:shadow-none">
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(37,99,235,0.06),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_50%_0%,rgba(59,130,246,0.12),transparent_55%)]" />
+                  <div className="relative">
+                    <div className="mb-2 flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                      <Banknote className="h-6 w-6" strokeWidth={1.5} />
+                      <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">Abertura de caixa</h2>
+                    </div>
+                    <p className={cn("text-sm", muted)}>
+                      Informe o fundo de troco, o turno e observações. Opcionalmente use a conferência de cédulas para conferência
+                      detalhada.
+                    </p>
+                    <Button type="button" className="mt-6 w-full" onClick={() => setOpenModal(true)} disabled={busy}>
+                      Iniciar formulário de abertura
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                <p className={cn("text-center text-sm", muted)}>Sem permissão para abrir o caixa.</p>
+              )}
+            </section>
+          )}
 
-      <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Histórico completo de sessões</h2>
-        <Table>
-          <THead>
-            <tr>
-              <Th>Abertura</Th>
-              <Th>Turno</Th>
-              <Th>Fechamento</Th>
-              <Th>Inicial</Th>
-              <Th>Contado</Th>
-              <Th>Aberto por</Th>
-              <Th>Fechado por</Th>
-              <Th className="text-right"> </Th>
-            </tr>
-          </THead>
-          <TBody>
-            {history.length === 0 ? (
-              <Tr>
-                <Td colSpan={8} className="py-8 text-center text-zinc-500">
-                  Nenhum registro ainda.
-                </Td>
-              </Tr>
-            ) : (
-              history.map((s) => (
-                <Tr
-                  key={s.id}
-                  role="button"
-                  tabIndex={0}
-                  className="cursor-pointer"
-                  onClick={() => setDetailSessionId(s.id)}
-                  onKeyDown={(e) => onSessionRowKey(e, s.id)}
-                >
-                  <Td className="whitespace-nowrap text-zinc-300">{dt.format(new Date(s.openedAt))}</Td>
-                  <Td className="text-zinc-400">{shiftLabel(s)}</Td>
-                  <Td className="whitespace-nowrap text-zinc-400">
-                    {s.closedAt ? dt.format(new Date(s.closedAt)) : "—"}
-                  </Td>
-                  <Td className="whitespace-nowrap tabular-nums">{money.format(s.initialValue)}</Td>
-                  <Td className="whitespace-nowrap tabular-nums text-zinc-400">
-                    {s.closingBalance != null ? money.format(s.closingBalance) : "—"}
-                  </Td>
-                  <Td className="max-w-[120px] truncate text-zinc-400">{s.openedBy.name}</Td>
-                  <Td className="max-w-[120px] truncate text-zinc-400">{s.closedBy?.name ?? "—"}</Td>
-                  <Td className="text-right">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-400/90">
-                      <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-                      Detalhes
-                    </span>
-                  </Td>
-                </Tr>
-              ))
-            )}
-          </TBody>
-        </Table>
-      </section>
+          <section>
+            <h2 className={cn("mb-3", labelUpper)}>Últimos fechamentos (referência)</h2>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400">
+                    <th className="px-3 py-2">Fechamento</th>
+                    <th className="px-3 py-2">Inicial</th>
+                    <th className="px-3 py-2">Contado</th>
+                    <th className="px-3 py-2">Operador</th>
+                    <th className="px-3 py-2 text-right"> </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lastFiveClosed.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className={cn("px-3 py-6 text-center", muted)}>
+                        Nenhum histórico fechado ainda.
+                      </td>
+                    </tr>
+                  ) : (
+                    lastFiveClosed.map((s) => (
+                      <tr
+                        key={s.id}
+                        role="button"
+                        tabIndex={0}
+                        className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-zinc-800 dark:hover:bg-zinc-800/80"
+                        onClick={() => setDetailSessionId(s.id)}
+                        onKeyDown={(e) => onSessionRowKey(e, s.id)}
+                      >
+                        <td className={cn("whitespace-nowrap px-3 py-2", muted)}>
+                          {s.closedAt ? dt.format(new Date(s.closedAt)) : "—"}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums text-slate-900 dark:text-zinc-100">{money.format(s.initialValue)}</td>
+                        <td className={cn("px-3 py-2 tabular-nums", muted)}>
+                          {s.closingBalance != null ? money.format(s.closingBalance) : "—"}
+                        </td>
+                        <td className={cn("max-w-[120px] truncate px-3 py-2", muted)}>{s.openedBy.name}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+                            Detalhes
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section>
+            <h2 className={cn("mb-3", labelUpper)}>Histórico completo de sessões</h2>
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Abertura</Th>
+                  <Th>Turno</Th>
+                  <Th>Fechamento</Th>
+                  <Th>Inicial</Th>
+                  <Th>Contado</Th>
+                  <Th>Aberto por</Th>
+                  <Th>Fechado por</Th>
+                  <Th className="text-right"> </Th>
+                </tr>
+              </THead>
+              <TBody>
+                {history.length === 0 ? (
+                  <Tr>
+                    <Td colSpan={8} className={cn("py-8 text-center", muted)}>
+                      Nenhum registro ainda.
+                    </Td>
+                  </Tr>
+                ) : (
+                  history.map((s) => (
+                    <Tr
+                      key={s.id}
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-800/60"
+                      onClick={() => setDetailSessionId(s.id)}
+                      onKeyDown={(e) => onSessionRowKey(e, s.id)}
+                    >
+                      <Td className="whitespace-nowrap text-slate-800 dark:text-zinc-200">{dt.format(new Date(s.openedAt))}</Td>
+                      <Td className={muted}>{shiftLabel(s)}</Td>
+                      <Td className={cn("whitespace-nowrap", muted)}>
+                        {s.closedAt ? dt.format(new Date(s.closedAt)) : "—"}
+                      </Td>
+                      <Td className="whitespace-nowrap tabular-nums text-slate-900 dark:text-zinc-100">{money.format(s.initialValue)}</Td>
+                      <Td className={cn("whitespace-nowrap tabular-nums", muted)}>
+                        {s.closingBalance != null ? money.format(s.closingBalance) : "—"}
+                      </Td>
+                      <Td className={cn("max-w-[120px] truncate", muted)}>{s.openedBy.name}</Td>
+                      <Td className={cn("max-w-[120px] truncate", muted)}>{s.closedBy?.name ?? "—"}</Td>
+                      <Td className="text-right">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                          <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
+                          Detalhes
+                        </span>
+                      </Td>
+                    </Tr>
+                  ))
+                )}
+              </TBody>
+            </Table>
+          </section>
         </>
       )}
 
       {openModal && canOpen && current === null ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
           role="presentation"
           onClick={() => !busy && setOpenModal(false)}
         >
           <div
             role="dialog"
             aria-modal
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/[0.1] bg-[#1e1e1e]/95 p-6 shadow-2xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-zinc-100">Abrir caixa</h3>
-            <p className="mt-1 text-sm text-zinc-500">Preencha o turno e o valor inicial em gaveta.</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">Abrir caixa</h3>
+            <p className={cn("mt-1 text-sm", muted)}>Preencha o turno e o valor inicial em gaveta.</p>
             <form className="mt-5 space-y-4" onSubmit={(e) => void onOpen(e)}>
-              <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+              <label className={cn("flex flex-col gap-1.5 text-xs font-semibold", muted)}>
                 Turno
-                <select
-                  className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
-                  value={openShift}
-                  onChange={(e) => setOpenShift(e.target.value as CashShift)}
-                  disabled={busy}
-                >
+                <select className={selectClass} value={openShift} onChange={(e) => setOpenShift(e.target.value as CashShift)} disabled={busy}>
                   {SHIFTS.map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
@@ -583,11 +605,11 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
                   placeholder="Ex.: Evento / feriado"
                 />
               ) : null}
-              <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+              <label className={cn("flex flex-col gap-1.5 text-xs font-semibold", muted)}>
                 Observações de abertura
                 <textarea
                   rows={3}
-                  className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+                  className={textareaClass}
                   value={openNotes}
                   onChange={(e) => setOpenNotes(e.target.value)}
                   disabled={busy}
@@ -596,14 +618,14 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
               </label>
 
               <div>
-                <p className="mb-2 text-xs font-medium text-zinc-500">Valor inicial na gaveta</p>
-                <div className="flex items-stretch gap-2 rounded-xl border border-amber-500/25 bg-[#141414] px-4 py-3 ring-1 ring-amber-500/10">
-                  <span className="flex items-center text-2xl font-semibold text-amber-400/95">R$</span>
+                <p className={cn("mb-2 text-xs font-semibold", muted)}>Valor inicial na gaveta</p>
+                <div className="flex items-stretch gap-2 rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-3 ring-1 ring-amber-100 dark:border-amber-900/50 dark:bg-amber-950/30 dark:ring-amber-900/40">
+                  <span className="flex items-center text-2xl font-semibold text-amber-700 dark:text-amber-400">R$</span>
                   <input
                     type="text"
                     inputMode="numeric"
                     autoComplete="off"
-                    className="min-w-0 flex-1 bg-transparent text-3xl font-semibold tabular-nums text-zinc-50 outline-none placeholder:text-zinc-600"
+                    className="min-w-0 flex-1 bg-transparent text-3xl font-semibold tabular-nums text-slate-900 outline-none placeholder:text-slate-400 dark:text-zinc-50 dark:placeholder:text-zinc-600"
                     placeholder="0,00"
                     value={formatDigitsAsBRL(openDigits)}
                     onChange={(e) => {
@@ -623,13 +645,13 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
                   Conferir cédulas e moedas (opcional)
                 </Button>
                 {denomsSnapshot && Object.keys(denomsSnapshot).length > 0 ? (
-                  <p className="mt-2 text-[11px] text-emerald-400/90">
+                  <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                     Conferência anexada ({money.format(sumDenominationMap(denomsSnapshot))})
                   </p>
                 ) : null}
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4">
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-zinc-700">
                 <Button type="button" variant="outline" onClick={() => setOpenModal(false)} disabled={busy}>
                   Cancelar
                 </Button>
