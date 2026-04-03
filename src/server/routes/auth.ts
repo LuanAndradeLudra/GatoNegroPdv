@@ -1,0 +1,52 @@
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import { prisma } from "../lib/prisma.js";
+import { authMiddleware, signToken } from "../middleware/auth.js";
+
+export const authRouter = Router();
+
+authRouter.post("/login", async (req, res) => {
+  const login = typeof req.body?.login === "string" ? req.body.login.trim() : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+  if (!login || !password) {
+    res.status(400).json({ error: "Informe login e senha." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { login } });
+  if (!user) {
+    res.status(401).json({ error: "Login ou senha inválidos." });
+    return;
+  }
+
+  const ok = bcrypt.compareSync(password, user.password);
+  if (!ok) {
+    res.status(401).json({ error: "Login ou senha inválidos." });
+    return;
+  }
+
+  const token = signToken({ sub: user.id, login: user.login });
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      login: user.login,
+      role: user.role,
+    },
+  });
+});
+
+authRouter.get("/me", authMiddleware, async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.sub },
+    select: { id: true, name: true, login: true, role: true },
+  });
+  if (!user) {
+    res.status(401).json({ error: "Usuário não encontrado." });
+    return;
+  }
+  res.json({ user });
+});
