@@ -3,6 +3,7 @@ import {
   Building2,
   ChefHat,
   LayoutDashboard,
+  LineChart,
   LogOut,
   Settings,
   ShoppingCart,
@@ -19,6 +20,7 @@ export type ShellView =
   | "caixa"
   | "pdv"
   | "erp"
+  | "financeiro"
   | "users"
   | "cozinha"
   | "clientes"
@@ -47,6 +49,7 @@ const NAV: NavDef[] = [
   { id: "caixa", label: "Caixa", icon: Wallet, enabled: (a) => a.pdv },
   { id: "pdv", label: "PDV", icon: ShoppingCart, enabled: (a) => a.pdv },
   { id: "erp", label: "ERP", icon: Building2, enabled: (a) => a.erp },
+  { id: "financeiro", label: "Financeiro", icon: LineChart, enabled: (a) => a.financeiro ?? false },
   { id: "users", label: "Usuários", icon: Users, enabled: (a) => a.manageUsers },
   { id: "cozinha", label: "Cozinha", icon: ChefHat, enabled: (a) => a.kitchen },
   { id: "clientes", label: "Clientes", icon: UsersRound, enabled: (a) => a.clients },
@@ -58,6 +61,7 @@ const TITLES: Record<ShellView, string> = {
   caixa: "Caixa",
   pdv: "PDV — Nova venda",
   erp: "ERP",
+  financeiro: "Financeiro",
   users: "Gestão de usuários",
   cozinha: "Cozinha",
   clientes: "Clientes",

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { apiPdvOrder, type PdvOrder } from "../api";
 import { Button } from "../ui/Button";
 
+type FetchOrderFn = (token: string, orderId: string) => Promise<PdvOrder>;
+
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
@@ -15,11 +17,14 @@ export function ClosedOrderReportModal({
   orderId,
   token,
   onClose,
+  fetchOrder = apiPdvOrder,
 }: {
   open: boolean;
   orderId: string | null;
   token: string | null;
   onClose: () => void;
+  /** Padrão: PDV. No Financeiro use `apiFinanceOrder`. */
+  fetchOrder?: FetchOrderFn;
 }) {
   const [data, setData] = useState<PdvOrder | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +41,7 @@ export function ClosedOrderReportModal({
     setLoading(true);
     setError(null);
     setData(null);
-    void apiPdvOrder(token, orderId)
+    void fetchOrder(token, orderId)
       .then((o) => {
         if (!cancelled) {
           setData(o);
@@ -55,7 +60,7 @@ export function ClosedOrderReportModal({
     return () => {
       cancelled = true;
     };
-  }, [open, orderId, token]);
+  }, [open, orderId, token, fetchOrder]);
 
   const payTotals = useMemo(() => {
     if (!data?.payments?.length) {

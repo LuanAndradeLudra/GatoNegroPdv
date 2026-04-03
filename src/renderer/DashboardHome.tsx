@@ -1,6 +1,7 @@
 import {
   ChefHat,
   CreditCard,
+  LineChart,
   ShoppingCart,
   UserCog,
   UsersRound,
@@ -29,6 +30,7 @@ const QUICK: QuickItem[] = [
   { id: "caixa", label: "Caixa", description: "Abrir, fechar e histórico", icon: Wallet, accent: true },
   { id: "pdv", label: "Nova venda", description: "Balcão e comandas", icon: ShoppingCart, accent: true },
   { id: "erp", label: "ERP", description: "Estoque e cadastros", icon: Building2 },
+  { id: "financeiro", label: "Financeiro", description: "Fluxo de caixa e relatórios", icon: LineChart },
   { id: "users", label: "Usuários", description: "Papéis e permissões", icon: UserCog },
   { id: "cozinha", label: "Cozinha", description: "Fila de preparo", icon: ChefHat },
   { id: "clientes", label: "Clientes", description: "Cadastro e relatórios", icon: UsersRound },
@@ -105,6 +107,11 @@ export function DashboardHome({
           ) : (
             <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-500">ERP</span>
           )}
+          {access.financeiro ? (
+            <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-200/90">
+              Fin
+            </span>
+          ) : null}
           {access.manageUsers ? (
             <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-200/90">
               Admin
@@ -208,7 +215,9 @@ export function DashboardHome({
                   ? pdvReady
                   : q.id === "erp"
                     ? access.erp
-                    : q.id === "users"
+                    : q.id === "financeiro"
+                      ? access.financeiro ?? false
+                      : q.id === "users"
                       ? access.manageUsers
                       : q.id === "cozinha"
                         ? access.kitchen

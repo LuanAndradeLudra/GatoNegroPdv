@@ -10,6 +10,7 @@ import { ModuleLockOverlay } from "./components/ModuleLockOverlay";
 import { PdvScreen, type PdvBootPayload } from "./PdvScreen";
 import { PaymentMethodsScreen } from "./PaymentMethodsScreen";
 import { ErpStockScreen } from "./ErpStockScreen";
+import { FinanceScreen } from "./FinanceScreen";
 import { UsersScreen } from "./UsersScreen";
 import { AppShell, type ShellView } from "./components/AppShell";
 
@@ -69,6 +70,8 @@ export function HubScreen() {
           return access.kitchen;
         case "clientes":
           return access.clients;
+        case "financeiro":
+          return access.financeiro ?? false;
         default:
           return false;
       }
@@ -127,6 +130,7 @@ export function HubScreen() {
             </ModuleLockOverlay>
           ) : null}
           {view === "erp" ? <ErpStockScreen /> : null}
+          {view === "financeiro" ? <FinanceScreen /> : null}
           {view === "users" ? <UsersScreen /> : null}
           {view === "cozinha" ? (
             <ModuleLockOverlay active={cashOpen === false && !!access.kitchen} onGoToCash={() => setView("caixa")}>

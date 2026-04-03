@@ -41,6 +41,8 @@ export type UserAccess = {
   customerOrders: boolean;
   /** Permissões do módulo Estoque (ERP). Opcional até novo login após atualização. */
   stock?: StockAccessFlags;
+  /** Fluxo de caixa e relatórios (FINANCEIRO → relatórios). Opcional até novo login. */
+  financeiro?: boolean;
 };
 
 export type User = {
@@ -926,4 +928,85 @@ export async function apiStockCreateMovement(
   });
   const data = await parseJson<{ movement: StockMovementRow }>(res);
   return data.movement;
+}
+
+export type FinanceCashFlowSession = {
+  sessionId: string;
+  openedAt: string;
+  closedAt: string;
+  shift: string;
+  shiftCustomLabel: string | null;
+  initialValue: number;
+  totalSangria: number;
+  totalSuprimento: number;
+  salesNet: number;
+  salesGross: number;
+  fees: number;
+  closingBalance: number | null;
+  openedBy: { id: string; name: string; login: string };
+  closedBy: { id: string; name: string; login: string } | null;
+};
+
+export type FinanceCashFlowResponse = {
+  filter: { from: string; to: string };
+  sessions: FinanceCashFlowSession[];
+};
+
+export async function apiFinanceCashFlow(
+  token: string,
+  q: { from: string; to: string },
+): Promise<FinanceCashFlowResponse> {
+  const params = new URLSearchParams({ from: q.from, to: q.to });
+  const res = await fetch(`/api/finance/cash-flow?${params.toString()}`, {
+    headers: authHeaders(token),
+  });
+  return parseJson(res);
+}
+
+export type FinanceSalesOrderRow = {
+  orderId: string;
+  closedAt: string;
+  kind: "DIRECT" | "COMANDA";
+  clientLabel: string;
+  totalNet: number;
+  totalGross: number;
+  totalFees: number;
+};
+
+export type FinanceSalesSummaryResponse = {
+  filter: { from: string; to: string };
+  orderCount: number;
+  totalNet: number;
+  totalGross: number;
+  totalFees: number;
+  byKind: { DIRECT: number; COMANDA: number };
+  byPaymentMethod: {
+    paymentMethodId: string;
+    name: string;
+    kind: string;
+    net: number;
+    gross: number;
+    fee: number;
+  }[];
+  /** Pedidos fechados no período (até 2000), mais recentes primeiro. */
+  orders: FinanceSalesOrderRow[];
+  averageTicket: number;
+};
+
+export async function apiFinanceSalesSummary(
+  token: string,
+  q: { from: string; to: string },
+): Promise<FinanceSalesSummaryResponse> {
+  const params = new URLSearchParams({ from: q.from, to: q.to });
+  const res = await fetch(`/api/finance/sales-summary?${params.toString()}`, {
+    headers: authHeaders(token),
+  });
+  return parseJson(res);
+}
+
+/** Relatório completo de um pedido fechado (Financeiro; não exige acesso ao PDV). */
+export async function apiFinanceOrder(token: string, id: string): Promise<PdvOrder> {
+  const res = await fetch(`/api/finance/orders/${encodeURIComponent(id)}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
 }

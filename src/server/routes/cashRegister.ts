@@ -5,6 +5,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { canAccessKitchen, canOpenPdv, resolvePermissions } from "../lib/permissions.js";
 import {
   requireCashRegisterView,
+  requireCashSessionDetailView,
   requireVendasAction,
 } from "../middleware/cashAccess.js";
 
@@ -134,7 +135,7 @@ cashRegisterRouter.get("/history", requireCashRegisterView, async (req, res) => 
 });
 
 /** Detalhe de uma sessão (fechada ou aberta), incluindo sangrias e suprimentos. */
-cashRegisterRouter.get("/sessions/:id", requireCashRegisterView, async (req, res) => {
+cashRegisterRouter.get("/sessions/:id", requireCashSessionDetailView, async (req, res) => {
   const { id } = req.params;
   const row = await prisma.cashRegister.findUnique({
     where: { id },

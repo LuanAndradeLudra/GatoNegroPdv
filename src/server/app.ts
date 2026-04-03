@@ -9,6 +9,7 @@ import { kitchenRouter } from "./routes/kitchen.js";
 import { customersRouter } from "./routes/customers.js";
 import { paymentMethodsRouter } from "./routes/paymentMethods.js";
 import { stockRouter } from "./routes/stock.js";
+import { financeRouter } from "./routes/finance.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -27,6 +28,7 @@ export function createApp(): express.Application {
   app.use("/api/customers", customersRouter);
   app.use("/api/payment-methods", paymentMethodsRouter);
   app.use("/api/stock", stockRouter);
+  app.use("/api/finance", financeRouter);
 
   if (process.env.NODE_ENV === "production") {
     const staticDir = path.join(process.cwd(), "dist");

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import {
   canAccessClients,
+  canAccessFinanceiro,
   canAccessKitchen,
   canManageUsers,
   canOpenErp,
@@ -37,6 +38,7 @@ function serializeSessionUser(user: {
       clients: canAccessClients(user.role, permissions),
       customerOrders: canViewCustomerOrders(user.role, permissions),
       stock: stockAccessFlags(user.role, permissions),
+      financeiro: canAccessFinanceiro(user.role, permissions),
     },
   };
 }

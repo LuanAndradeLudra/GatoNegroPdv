@@ -158,6 +158,14 @@ export function canViewCustomerOrders(role: UserRole, map: PermissionsMap): bool
   return hasPermission(map, "CLIENTES", "ver");
 }
 
+/** Módulo Financeiro: fluxo de caixa e relatórios de vendas. */
+export function canAccessFinanceiro(role: UserRole, map: PermissionsMap): boolean {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return true;
+  }
+  return hasPermission(map, "FINANCEIRO", "relatorios");
+}
+
 export type StockAccessFlags = {
   produtos: boolean;
   entrada: boolean;
