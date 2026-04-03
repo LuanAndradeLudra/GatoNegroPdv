@@ -18,6 +18,7 @@ type AuthContextValue = {
   state: AuthState;
   login: (token: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -34,6 +35,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoredToken(token);
     const user = await apiMe(token);
     setState({ status: "authenticated", user, token });
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token) {
+      return;
+    }
+    const user = await apiMe(token);
+    setState((s) => {
+      if (s.status !== "authenticated") {
+        return s;
+      }
+      return { status: "authenticated", user, token };
+    });
   }, []);
 
   useEffect(() => {
@@ -65,8 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state,
       login,
       logout,
+      refreshUser,
     }),
-    [state, login, logout],
+    [state, login, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
