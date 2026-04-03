@@ -30,6 +30,26 @@ import { Input } from "./ui/Input";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+/** Campos PDV (select / input) — light + dark */
+const pdvField = cn(
+  "rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm text-slate-900 outline-none transition-colors",
+  "focus:border-slate-900 focus:ring-2 focus:ring-slate-950/10",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500 dark:focus:ring-blue-500/20",
+);
+const pdvFieldSm = cn(
+  "rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-900 outline-none",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200",
+);
+const pdvQtyBtn = cn(
+  "rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-slate-700 transition-colors hover:bg-slate-200",
+  "dark:border-white/15 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700",
+);
+const pdvSearchInput = cn(
+  "mb-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none",
+  "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20",
+  "dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-amber-500/50 dark:focus:ring-amber-500/25",
+);
+
 function qtyInOrder(ord: PdvOrder, productId: string): number {
   return ord.items.filter((i) => i.productId === productId).reduce((s, i) => s + i.quantity, 0);
 }
@@ -41,15 +61,15 @@ function triggerShake(setter: (id: string | null) => void, productId: string): v
 
 function stockLineClass(p: PdvProduct): string {
   if (!p.controlsStock) {
-    return "text-[10px] leading-snug text-zinc-500";
+    return "text-[10px] leading-snug text-slate-500 dark:text-zinc-500";
   }
   if (p.minStock > 0 && p.stock <= p.minStock) {
-    return "text-[10px] leading-snug font-semibold text-red-400";
+    return "text-[10px] leading-snug font-semibold text-red-600 dark:text-red-400";
   }
   if (p.stock < 5) {
-    return "text-[10px] leading-snug font-medium text-orange-400/95";
+    return "text-[10px] leading-snug font-medium text-orange-600 dark:text-orange-400";
   }
-  return "text-[10px] leading-snug text-zinc-500";
+  return "text-[10px] leading-snug text-slate-600 dark:text-zinc-500";
 }
 
 function kitchenStatusLabel(status: string | null): string | null {
@@ -510,39 +530,39 @@ export function PdvScreen({
   }
 
   const cartPanel = (
-    <aside className="flex w-full flex-col border-t border-white/[0.08] bg-[#161616]/95 backdrop-blur-md lg:w-[min(420px,40vw)] lg:border-l lg:border-t-0">
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
-        <h2 className="text-sm font-semibold text-zinc-200">Resumo</h2>
+    <aside className="flex w-full flex-col border-t border-slate-200 bg-slate-50/80 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95 lg:w-[min(420px,40vw)] lg:border-l lg:border-t-0">
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-zinc-800">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">Resumo</h2>
         {order && step === "selling" ? (
-          <span className="text-[11px] text-zinc-500">#{order.id.slice(0, 8)}</span>
+          <span className="text-[11px] text-slate-500 dark:text-zinc-500">#{order.id.slice(0, 8)}</span>
         ) : null}
       </div>
       <div className="flex min-h-[200px] flex-1 flex-col overflow-auto px-4 py-3">
         {!order || step !== "selling" ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center">
-            <div className="rounded-full bg-white/[0.06] p-4 ring-1 ring-white/[0.08]">
-              <ShoppingBag className="h-8 w-8 text-zinc-500" strokeWidth={1.25} />
+            <div className="rounded-full bg-slate-100 p-4 ring-1 ring-slate-200 dark:bg-white/[0.06] dark:ring-white/[0.08]">
+              <ShoppingBag className="h-8 w-8 text-slate-400 dark:text-zinc-500" strokeWidth={1.25} />
             </div>
-            <p className="max-w-[240px] text-sm text-zinc-500">
+            <p className="max-w-[240px] text-sm text-slate-500 dark:text-zinc-500">
               Inicie uma venda direta ou uma comanda para montar o pedido aqui.
             </p>
-            <p className="text-2xl font-semibold tabular-nums text-zinc-600">{money.format(0)}</p>
+            <p className="text-2xl font-semibold tabular-nums text-slate-400 dark:text-zinc-600">{money.format(0)}</p>
           </div>
         ) : order.items.length === 0 ? (
-          <p className="text-sm text-zinc-500">Nenhum item. Toque em um produto à esquerda.</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-500">Nenhum item. Toque em um produto à esquerda.</p>
         ) : (
-          <ul className="space-y-0 divide-y divide-white/[0.06]">
+          <ul className="space-y-0 divide-y divide-slate-200 dark:divide-white/[0.06]">
             {order.items.map((i) => (
               <li key={i.id} className="flex justify-between gap-2 py-3 first:pt-0">
                 <div className="min-w-0 flex-1">
-                  <strong className="text-sm text-zinc-100">{i.productName}</strong>
+                  <strong className="text-sm text-slate-900 dark:text-zinc-100">{i.productName}</strong>
                   {i.isKitchenItem && i.kitchenStatus ? (
-                    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">
+                    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400/90">
                       {kitchenStatusLabel(i.kitchenStatus)}
                     </span>
                   ) : null}
                   {i.controlsStock && i.maxQuantity != null ? (
-                    <span className="mt-0.5 block text-[10px] text-zinc-500">
+                    <span className="mt-0.5 block text-[10px] text-slate-500 dark:text-zinc-500">
                       Estoque (máx. neste pedido): {i.maxQuantity}
                       {i.stockPhysical != null ? ` · Físico ${i.stockPhysical}` : ""}
                       {i.reservedElsewhere != null && i.reservedElsewhere > 0
@@ -550,12 +570,12 @@ export function PdvScreen({
                         : ""}
                     </span>
                   ) : null}
-                  <div className="mt-1 text-xs text-zinc-500">
+                  <div className="mt-1 text-xs text-slate-600 dark:text-zinc-500">
                     {money.format(i.unitPrice)} ×{" "}
                     <span className="inline-flex items-center gap-1 align-middle">
                       <button
                         type="button"
-                        className="rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800"
+                        className={pdvQtyBtn}
                         disabled={busy || i.quantity <= 1}
                         onClick={() => {
                           if (i.quantity <= 1) {
@@ -571,7 +591,7 @@ export function PdvScreen({
                       <button
                         type="button"
                         className={cn(
-                          "rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800",
+                          pdvQtyBtn,
                           i.controlsStock &&
                             i.maxQuantity != null &&
                             i.quantity >= i.maxQuantity - 1e-6 &&
@@ -604,7 +624,7 @@ export function PdvScreen({
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 text-zinc-500 hover:text-red-400"
+                  className="shrink-0 text-slate-400 hover:text-red-600 dark:text-zinc-500 dark:hover:text-red-400"
                   onClick={() => void removeItem(i.id)}
                   disabled={busy}
                   aria-label="Remover"
@@ -617,14 +637,16 @@ export function PdvScreen({
         )}
       </div>
       {order && step === "selling" ? (
-        <div className="border-t border-white/[0.06] bg-[#161616]/90 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Couvert e taxa de serviço</p>
-          <p className="mt-0.5 text-[10px] text-zinc-600">
+        <div className="border-t border-slate-200 bg-white/60 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/90">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-500">
+            Couvert e taxa de serviço
+          </p>
+          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-zinc-600">
             % incide sobre o subtotal dos itens. Novos pedidos herdam o padrão de Configurações.
           </p>
           <div className="mt-3 space-y-3">
-            <div className="rounded-lg border border-white/[0.06] bg-[#141414]/80 p-2.5">
-              <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-white/[0.06] dark:bg-zinc-950/50">
+              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-zinc-300">
                 <input
                   type="checkbox"
                   checked={order.couvertEnabled ?? false}
@@ -635,7 +657,7 @@ export function PdvScreen({
               </label>
               <div className="mt-2 flex flex-wrap gap-2">
                 <select
-                  className="rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-200"
+                  className={pdvFieldSm}
                   value={order.couvertMode ?? "PERCENT"}
                   disabled={busy || !order.couvertEnabled}
                   onChange={(e) =>
@@ -648,7 +670,7 @@ export function PdvScreen({
                 <input
                   type="text"
                   inputMode="decimal"
-                  className="min-w-[5rem] flex-1 rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-100"
+                  className={cn(pdvFieldSm, "min-w-[5rem] flex-1")}
                   disabled={busy || !order.couvertEnabled}
                   defaultValue={String(order.couvertValue ?? 0)}
                   key={`cv-${order.id}-${order.couvertValue}-${order.couvertMode}`}
@@ -664,13 +686,13 @@ export function PdvScreen({
                     void patchOrderCommercial({ couvertValue: n });
                   }}
                 />
-                <span className="self-center text-[10px] text-zinc-500">
+                <span className="self-center text-[10px] text-slate-500 dark:text-zinc-500">
                   {(order.couvertMode ?? "PERCENT") === "PERCENT" ? "%" : "R$"}
                 </span>
               </div>
             </div>
-            <div className="rounded-lg border border-white/[0.06] bg-[#141414]/80 p-2.5">
-              <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 dark:border-white/[0.06] dark:bg-zinc-950/50">
+              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-zinc-300">
                 <input
                   type="checkbox"
                   checked={order.serviceFeeEnabled ?? false}
@@ -681,7 +703,7 @@ export function PdvScreen({
               </label>
               <div className="mt-2 flex flex-wrap gap-2">
                 <select
-                  className="rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-200"
+                  className={pdvFieldSm}
                   value={order.serviceFeeMode ?? "PERCENT"}
                   disabled={busy || !order.serviceFeeEnabled}
                   onChange={(e) =>
@@ -694,7 +716,7 @@ export function PdvScreen({
                 <input
                   type="text"
                   inputMode="decimal"
-                  className="min-w-[5rem] flex-1 rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-100"
+                  className={cn(pdvFieldSm, "min-w-[5rem] flex-1")}
                   disabled={busy || !order.serviceFeeEnabled}
                   defaultValue={String(order.serviceFeeValue ?? 0)}
                   key={`sv-${order.id}-${order.serviceFeeValue}-${order.serviceFeeMode}`}
@@ -710,7 +732,7 @@ export function PdvScreen({
                     void patchOrderCommercial({ serviceFeeValue: n });
                   }}
                 />
-                <span className="self-center text-[10px] text-zinc-500">
+                <span className="self-center text-[10px] text-slate-500 dark:text-zinc-500">
                   {(order.serviceFeeMode ?? "PERCENT") === "PERCENT" ? "%" : "R$"}
                 </span>
               </div>
@@ -718,32 +740,32 @@ export function PdvScreen({
           </div>
         </div>
       ) : null}
-      <div className="border-t border-white/[0.08] bg-[#141414]/80 px-4 py-4">
+      <div className="border-t border-slate-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950/80">
         {order && step === "selling" ? (
           <>
             {((order.couvertAmount ?? 0) > 0.001 || (order.serviceFeeAmount ?? 0) > 0.001) && (
-              <div className="mb-3 space-y-1 text-[11px] text-zinc-500">
+              <div className="mb-3 space-y-1 text-[11px] text-slate-500 dark:text-zinc-500">
                 <div className="flex justify-between gap-2">
                   <span>Subtotal (itens)</span>
-                  <span className="tabular-nums text-zinc-400">{money.format(order.subtotal)}</span>
+                  <span className="tabular-nums text-slate-600 dark:text-zinc-400">{money.format(order.subtotal)}</span>
                 </div>
                 {(order.couvertAmount ?? 0) > 0.001 ? (
                   <div className="flex justify-between gap-2">
                     <span>Couvert</span>
-                    <span className="tabular-nums text-zinc-400">{money.format(order.couvertAmount ?? 0)}</span>
+                    <span className="tabular-nums text-slate-600 dark:text-zinc-400">{money.format(order.couvertAmount ?? 0)}</span>
                   </div>
                 ) : null}
                 {(order.serviceFeeAmount ?? 0) > 0.001 ? (
                   <div className="flex justify-between gap-2">
                     <span>Taxa de serviço</span>
-                    <span className="tabular-nums text-zinc-400">{money.format(order.serviceFeeAmount ?? 0)}</span>
+                    <span className="tabular-nums text-slate-600 dark:text-zinc-400">{money.format(order.serviceFeeAmount ?? 0)}</span>
                   </div>
                 ) : null}
               </div>
             )}
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm text-zinc-500">Total a pagar</span>
-              <span className="text-2xl font-bold tabular-nums text-amber-200/95">
+              <span className="text-sm text-slate-500 dark:text-zinc-500">Total a pagar</span>
+              <span className="text-2xl font-bold tabular-nums text-amber-700 dark:text-amber-200/95">
                 {money.format(order.totalDue ?? order.subtotal)}
               </span>
             </div>
@@ -753,8 +775,8 @@ export function PdvScreen({
           </>
         ) : (
           <div className="flex items-baseline justify-between gap-2 opacity-50">
-            <span className="text-sm text-zinc-500">Total</span>
-            <span className="text-xl font-semibold tabular-nums text-zinc-600">{money.format(0)}</span>
+            <span className="text-sm text-slate-500 dark:text-zinc-500">Total</span>
+            <span className="text-xl font-semibold tabular-nums text-slate-400 dark:text-zinc-600">{money.format(0)}</span>
           </div>
         )}
       </div>
@@ -766,12 +788,12 @@ export function PdvScreen({
       {step === "selling" && order ? (
       <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-4 py-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 dark:border-zinc-800">
             <Button type="button" variant="ghost" className="!px-2 text-sm" onClick={leaveSelling} disabled={busy}>
               ← Voltar ao menu
             </Button>
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-sm font-semibold text-zinc-100">
+              <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-zinc-100">
                 {order.kind === "DIRECT" ? "Venda direta" : "Comanda"}
                 {order.kind === "COMANDA" && order.customer
                   ? ` — ${order.customer.name}`
@@ -779,18 +801,22 @@ export function PdvScreen({
                     ? ` — ${order.clientName}`
                     : null}
               </h2>
-              <p className="text-[11px] text-zinc-500">
+              <p className="text-[11px] text-slate-500 dark:text-zinc-500">
                 Pedido #{order.id.slice(0, 8)} · {order.status}
               </p>
             </div>
           </div>
-          {error ? <p className="border-b border-red-500/20 bg-red-950/30 px-4 py-2 text-sm text-red-300">{error}</p> : null}
+          {error ? (
+            <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/35 dark:text-red-200">
+              {error}
+            </p>
+          ) : null}
           {order.kind === "COMANDA" && accessClients ? (
-            <div className="flex flex-wrap gap-3 border-b border-white/[0.06] bg-[#161616]/50 px-4 py-3">
-              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-zinc-500">
+            <div className="flex flex-wrap gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-slate-500 dark:text-zinc-500">
                 Cliente cadastrado
                 <select
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  className={pdvField}
                   value={order.customerId ?? ""}
                   disabled={busy}
                   onChange={(e) => {
@@ -821,10 +847,10 @@ export function PdvScreen({
                   ))}
                 </select>
               </label>
-              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-zinc-500">
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-slate-500 dark:text-zinc-500">
                 Mesa / observação
                 <input
-                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  className={pdvField}
                   value={mesaEdit}
                   onChange={(e) => setMesaEdit(e.target.value)}
                   disabled={busy}
@@ -856,7 +882,7 @@ export function PdvScreen({
           <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4">
             <input
               type="search"
-              className="mb-3 w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
+              className={pdvSearchInput}
               placeholder="Buscar produto…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -873,16 +899,16 @@ export function PdvScreen({
                     key={p.id}
                     type="button"
                     className={cn(
-                      "flex flex-col items-start gap-1 rounded-lg border border-white/[0.08] bg-[#1e1e1e]/80 p-3 text-left text-sm transition-colors hover:border-amber-500/30 hover:bg-[#222]",
-                      atCap && "opacity-55 hover:border-white/[0.08] hover:bg-[#1e1e1e]/80",
+                      "flex flex-col items-start gap-1 rounded-lg border border-slate-200 bg-white p-3 text-left text-sm transition-colors hover:border-blue-300 hover:bg-slate-50 dark:border-white/[0.08] dark:bg-zinc-800/80 dark:hover:border-amber-500/30 dark:hover:bg-zinc-800",
+                      atCap && "opacity-55 hover:border-slate-200 hover:bg-white dark:hover:border-white/[0.08] dark:hover:bg-zinc-800/80",
                       shakeProductId === p.id && "gn-shake",
                     )}
                     onClick={() => void addProduct(p)}
                     disabled={busy}
                     title={atCap ? "Sem quantidade disponível para este pedido (estoque ou reserva em outras comandas)" : undefined}
                   >
-                    <span className="font-medium text-zinc-100">{p.name}</span>
-                    <span className="text-[11px] text-zinc-500">
+                    <span className="font-medium text-slate-900 dark:text-zinc-100">{p.name}</span>
+                    <span className="text-[11px] text-slate-500 dark:text-zinc-500">
                       {money.format(p.price)}
                       {p.isKitchenItem ? " · Cozinha" : ""}
                     </span>
@@ -891,10 +917,10 @@ export function PdvScreen({
                         className={cn(
                           "inline-flex max-w-full flex-wrap items-center gap-x-1 rounded-md px-1.5 py-0.5 ring-1 ring-inset",
                           p.minStock > 0 && p.stock <= p.minStock
-                            ? "bg-red-950/50 ring-red-500/35"
+                            ? "bg-red-50 ring-red-200 dark:bg-red-950/50 dark:ring-red-500/35"
                             : p.stock < 5
-                              ? "bg-orange-950/40 ring-orange-500/30"
-                              : "bg-white/[0.04] ring-white/[0.08]",
+                              ? "bg-orange-50 ring-orange-200 dark:bg-orange-950/40 dark:ring-orange-500/30"
+                              : "bg-slate-100 ring-slate-200 dark:bg-white/[0.04] dark:ring-white/[0.08]",
                         )}
                       >
                         <span className={stockLineClass(p)}>
@@ -914,15 +940,21 @@ export function PdvScreen({
       </div>
       ) : (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-white/[0.08] lg:border-b-0 lg:border-r">
-        {error ? <p className="border-b border-red-500/20 bg-red-950/30 px-4 py-2 text-sm text-red-300">{error}</p> : null}
-        <div className="space-y-4 border-b border-white/[0.06] p-4">
-          <div className="flex rounded-lg bg-zinc-900/60 p-1 ring-1 ring-white/[0.08]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-slate-200 lg:border-b-0 lg:border-r dark:border-zinc-800">
+        {error ? (
+          <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/35 dark:text-red-200">
+            {error}
+          </p>
+        ) : null}
+        <div className="space-y-4 border-b border-slate-200 p-4 dark:border-zinc-800">
+          <div className="flex rounded-lg bg-slate-100 p-1 ring-1 ring-slate-200 dark:bg-zinc-900/60 dark:ring-white/[0.08]">
             <button
               type="button"
               className={cn(
                 "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
-                saleMode === "direct" ? "bg-[#2a2a2a] text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300",
+                saleMode === "direct"
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-slate-500 hover:text-slate-800 dark:text-zinc-500 dark:hover:text-zinc-300",
               )}
               onClick={() => setSaleMode("direct")}
             >
@@ -932,7 +964,9 @@ export function PdvScreen({
               type="button"
               className={cn(
                 "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
-                saleMode === "comanda" ? "bg-[#2a2a2a] text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300",
+                saleMode === "comanda"
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-slate-500 hover:text-slate-800 dark:text-zinc-500 dark:hover:text-zinc-300",
               )}
               onClick={() => setSaleMode("comanda")}
             >
@@ -942,7 +976,7 @@ export function PdvScreen({
 
           {saleMode === "direct" ? (
             <div className="space-y-3">
-              <p className="text-sm text-zinc-500">Balcão, sem cliente obrigatório. Ideal para vendas rápidas.</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-500">Balcão, sem cliente obrigatório. Ideal para vendas rápidas.</p>
               <Button type="button" className="w-full sm:w-auto" disabled={busy} onClick={() => void startDirect()}>
                 Iniciar venda no balcão
               </Button>
@@ -950,10 +984,10 @@ export function PdvScreen({
           ) : (
             <form className="space-y-3" onSubmit={(e) => void startComanda(e)}>
               {accessClients ? (
-                <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-zinc-500">
                   Cliente (faturamento)
                   <select
-                    className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
+                    className={cn(pdvField, "px-3")}
                     value={selectedCustomerId}
                     onChange={(e) => setSelectedCustomerId(e.target.value)}
                     disabled={busy}
@@ -987,12 +1021,12 @@ export function PdvScreen({
         </div>
 
         <div className="flex flex-1 flex-col gap-4 p-4">
-          <div className="rounded-xl border border-white/[0.06] bg-[#181818]/80 px-4 py-3">
-            <p className="text-sm text-zinc-300">
-              <span className="font-semibold text-amber-200/90">{openComandas.length}</span> comandas abertas
-              <span className="mx-2 text-zinc-600">|</span>
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/60">
+            <p className="text-sm text-slate-700 dark:text-zinc-300">
+              <span className="font-semibold text-amber-700 dark:text-amber-300">{openComandas.length}</span> comandas abertas
+              <span className="mx-2 text-slate-400 dark:text-zinc-600">|</span>
               Total em aberto:{" "}
-              <span className="font-semibold tabular-nums text-zinc-100">{money.format(openComandasTotal)}</span>
+              <span className="font-semibold tabular-nums text-slate-900 dark:text-zinc-100">{money.format(openComandasTotal)}</span>
             </p>
           </div>
           <Input
@@ -1003,16 +1037,16 @@ export function PdvScreen({
             disabled={busy}
           />
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Comandas abertas</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Comandas abertas</h3>
             {openComandas.length === 0 ? (
-              <p className="text-sm text-zinc-600">Nenhuma comanda aberta.</p>
+              <p className="text-sm text-slate-600 dark:text-zinc-600">Nenhuma comanda aberta.</p>
             ) : (
               <ul className="flex flex-wrap gap-2">
                 {openComandas.map((o) => (
                   <li key={o.id}>
                     <button
                       type="button"
-                      className="rounded-full border border-white/10 bg-[#1a1a1a] px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-amber-500/40"
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-slate-50 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-amber-500/40 dark:hover:bg-zinc-800"
                       onClick={() => void resumeComanda(o)}
                       disabled={busy}
                     >
@@ -1025,17 +1059,17 @@ export function PdvScreen({
           </div>
 
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Encerradas hoje</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Encerradas hoje</h3>
             {recentClosed.length === 0 ? (
-              <p className="text-sm text-zinc-600">Nenhuma venda fechada hoje.</p>
+              <p className="text-sm text-slate-600 dark:text-zinc-600">Nenhuma venda fechada hoje.</p>
             ) : (
               <ul className="space-y-2">
                 {recentClosed.map((o) => (
                   <li
                     key={o.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-[#1a1a1a]/60 px-3 py-2 text-xs"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm dark:border-white/[0.06] dark:bg-zinc-800/60"
                   >
-                    <span className="text-zinc-400">
+                    <span className="text-slate-600 dark:text-zinc-400">
                       {o.kind === "DIRECT" ? "Balcão" : "Comanda"}{" "}
                       {o.customer?.name ?? o.clientName ?? "—"} · {money.format(o.totalDue ?? o.subtotal)}
                     </span>
@@ -1082,26 +1116,26 @@ export function PdvScreen({
       )}
       {cancelKitchenModal ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#1a1a1a] p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-zinc-100">Itens de cozinha no estorno</h3>
-            <p className="mt-2 text-sm text-zinc-500">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-zinc-100">Itens de cozinha no estorno</h3>
+            <p className="mt-2 text-sm text-slate-500 dark:text-zinc-500">
               Para cada item, informe se houve desperdício (não volta ao estoque físico) ou se pode devolver ao estoque.
             </p>
             <ul className="mt-4 max-h-[50vh] space-y-3 overflow-auto">
               {cancelKitchenModal.lines.map((ln) => (
-                <li key={ln.id} className="rounded-lg border border-white/[0.06] bg-[#141414] px-3 py-2">
-                  <p className="text-sm text-zinc-200">
+                <li key={ln.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950/50">
+                  <p className="text-sm text-slate-800 dark:text-zinc-200">
                     {ln.productName}{" "}
-                    <span className="text-zinc-500">
+                    <span className="text-slate-500 dark:text-zinc-500">
                       × {ln.quantity}
                     </span>
                   </p>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
-                    <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-slate-700 dark:text-zinc-300">
                       <input
                         type="radio"
                         name={`kr-${ln.id}`}
@@ -1119,7 +1153,7 @@ export function PdvScreen({
                       />
                       Volta ao estoque
                     </label>
-                    <label className="flex cursor-pointer items-center gap-1.5 text-zinc-300">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-slate-700 dark:text-zinc-300">
                       <input
                         type="radio"
                         name={`kr-${ln.id}`}

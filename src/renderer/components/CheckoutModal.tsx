@@ -137,7 +137,7 @@ export function CheckoutModal({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[2px] dark:bg-black/55"
       role="presentation"
       onClick={() => !busy && onClose()}
     >
@@ -145,15 +145,15 @@ export function CheckoutModal({
         role="dialog"
         aria-modal
         aria-labelledby="checkout-title"
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/[0.1] bg-[#1c1c1c] p-5 shadow-2xl"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-white/[0.08] pb-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4 dark:border-zinc-700">
           <div>
-            <h2 id="checkout-title" className="text-lg font-semibold text-zinc-100">
+            <h2 id="checkout-title" className="text-lg font-semibold text-slate-900 dark:text-zinc-100">
               Pagamento
             </h2>
-            <div className="mt-1 space-y-1 text-sm text-zinc-500">
+            <div className="mt-1 space-y-1 text-sm text-slate-500 dark:text-zinc-500">
               {itemsSubtotal != null && (couvertAmount ?? 0) + (serviceFeeAmount ?? 0) > 0.001 ? (
                 <p className="text-[11px] leading-relaxed">
                   Itens {money.format(itemsSubtotal)}
@@ -172,7 +172,8 @@ export function CheckoutModal({
                 </p>
               ) : null}
               <p>
-                Total: <span className="font-semibold text-amber-200/95">{money.format(totalDue)}</span>
+                Total:{" "}
+                <span className="font-semibold text-amber-800 dark:text-amber-200/95">{money.format(totalDue)}</span>
               </p>
             </div>
           </div>
@@ -183,7 +184,7 @@ export function CheckoutModal({
 
         {totalDue <= 0 ? (
           <div className="mt-6 space-y-4">
-            <p className="text-sm text-zinc-400">Pedido sem valor. Confirme para encerrar.</p>
+            <p className="text-sm text-slate-600 dark:text-zinc-400">Pedido sem valor. Confirme para encerrar.</p>
             <Button type="button" className="w-full" disabled={busy} onClick={() => onConfirm([])}>
               {busy ? "…" : "Confirmar"}
             </Button>
@@ -191,21 +192,25 @@ export function CheckoutModal({
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="text-zinc-500">
-                Pago: <span className="tabular-nums text-zinc-200">{money.format(paid)}</span>
+              <span className="text-slate-600 dark:text-zinc-500">
+                Pago: <span className="tabular-nums text-slate-900 dark:text-zinc-200">{money.format(paid)}</span>
               </span>
               <span
                 className={
-                  Math.abs(remaining) <= 0.02 ? "font-medium text-emerald-400/90" : "font-medium text-amber-300/90"
+                  Math.abs(remaining) <= 0.02
+                    ? "font-medium text-emerald-700 dark:text-emerald-400/90"
+                    : "font-medium text-amber-700 dark:text-amber-300/90"
                 }
               >
                 Restante: {money.format(remaining)}
               </span>
             </div>
 
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Formas de pagamento</p>
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">
+              Formas de pagamento
+            </p>
             {activeMethods.length === 0 ? (
-              <p className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-3 text-sm text-amber-100/90">
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/35 dark:text-amber-100/90">
                 Nenhuma forma de pagamento ativa. Cadastre em{" "}
                 <strong className="font-semibold">Configurações</strong> antes de fechar vendas.
               </p>
@@ -217,20 +222,20 @@ export function CheckoutModal({
                   type="button"
                   disabled={busy || Math.abs(remaining) <= 0.02}
                   onClick={() => startDraft(m.id)}
-                  className="flex flex-col items-start rounded-xl border border-white/[0.08] bg-[#252525] px-3 py-3 text-left transition-colors hover:border-amber-500/35 hover:bg-[#2a2a2a] disabled:opacity-40"
+                  className="flex flex-col items-start rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-left transition-colors hover:border-blue-300 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-zinc-800 dark:hover:border-amber-500/35 dark:hover:bg-zinc-800/90"
                 >
-                  <span className="text-sm font-medium text-zinc-100">{m.name}</span>
-                  <span className="text-[10px] text-zinc-500">{KIND_LABEL[m.kind]}</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-zinc-100">{m.name}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-zinc-500">{KIND_LABEL[m.kind]}</span>
                   {m.feePercent != null && m.feePercent > 0 ? (
-                    <span className="mt-1 text-[10px] text-zinc-600">Taxa {m.feePercent}%</span>
+                    <span className="mt-1 text-[10px] text-slate-500 dark:text-zinc-600">Taxa {m.feePercent}%</span>
                   ) : null}
                 </button>
               ))}
             </div>
 
             {draft && selectedMethod ? (
-              <div className="mt-5 space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
-                <p className="text-xs font-medium text-amber-200/90">{selectedMethod.name}</p>
+              <div className="mt-5 space-y-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 dark:border-amber-900/40 dark:bg-amber-950/25">
+                <p className="text-xs font-medium text-amber-900 dark:text-amber-200/90">{selectedMethod.name}</p>
                 <Input
                   label="Valor desta parcela"
                   inputMode="numeric"
@@ -252,7 +257,9 @@ export function CheckoutModal({
                       disabled={busy}
                     />
                     {troco !== null ? (
-                      <p className="text-center text-lg font-semibold text-emerald-300/95">Troco: {money.format(troco)}</p>
+                      <p className="text-center text-lg font-semibold text-emerald-700 dark:text-emerald-300/95">
+                        Troco: {money.format(troco)}
+                      </p>
                     ) : null}
                   </>
                 ) : null}
@@ -268,23 +275,23 @@ export function CheckoutModal({
             ) : null}
 
             {lines.length > 0 ? (
-              <ul className="mt-5 space-y-2 border-t border-white/[0.06] pt-4">
+              <ul className="mt-5 space-y-2 border-t border-slate-200 pt-4 dark:border-zinc-700">
                 {lines.map((l, i) => {
                   const m = activeMethods.find((x) => x.id === l.paymentMethodId);
                   return (
                     <li
                       key={`${l.paymentMethodId}-${i}`}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-sm"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800/40"
                     >
-                      <span className="text-zinc-300">
+                      <span className="text-slate-800 dark:text-zinc-300">
                         {m?.name ?? "—"} · {money.format(l.amountPaid)}
                         {l.cashReceived != null ? (
-                          <span className="text-zinc-500"> (recebido {money.format(l.cashReceived)})</span>
+                          <span className="text-slate-500 dark:text-zinc-500"> (recebido {money.format(l.cashReceived)})</span>
                         ) : null}
                       </span>
                       <button
                         type="button"
-                        className="text-xs text-red-400/90 hover:underline"
+                        className="text-xs text-red-600 hover:underline dark:text-red-400/90"
                         disabled={busy}
                         onClick={() => removeLine(i)}
                       >
