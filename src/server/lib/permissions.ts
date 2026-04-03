@@ -1,6 +1,6 @@
 import type { UserRole } from "@prisma/client";
 
-export const PERMISSION_MODULES = ["VENDAS", "ESTOQUE", "FINANCEIRO", "COZINHA"] as const;
+export const PERMISSION_MODULES = ["VENDAS", "ESTOQUE", "FINANCEIRO", "COZINHA", "CLIENTES"] as const;
 export type PermissionModule = (typeof PERMISSION_MODULES)[number];
 
 export const MODULE_ACTIONS: Record<PermissionModule, readonly string[]> = {
@@ -8,6 +8,7 @@ export const MODULE_ACTIONS: Record<PermissionModule, readonly string[]> = {
   ESTOQUE: ["entrada", "saida", "ajuste"],
   FINANCEIRO: ["relatorios"],
   COZINHA: ["ver", "atualizar"],
+  CLIENTES: ["cadastrar", "ver", "editar"],
 };
 
 export type PermissionsMap = Record<PermissionModule, string[]>;
@@ -18,6 +19,7 @@ function emptyMap(): PermissionsMap {
     ESTOQUE: [],
     FINANCEIRO: [],
     COZINHA: [],
+    CLIENTES: [],
   };
 }
 
@@ -36,6 +38,7 @@ export function defaultPermissionsForRole(role: UserRole): PermissionsMap {
       break;
     case "VENDEDOR":
       m.VENDAS = fullModule("VENDAS");
+      m.CLIENTES = ["cadastrar", "ver", "editar"];
       break;
     case "ESTOQUE":
       m.ESTOQUE = fullModule("ESTOQUE");
@@ -134,6 +137,25 @@ export function canUpdateKitchen(role: UserRole, map: PermissionsMap): boolean {
     return true;
   }
   return hasPermission(map, "COZINHA", "atualizar");
+}
+
+/** Cadastro / lista de clientes (hub Clientes, PDV vínculo). */
+export function canAccessClients(role: UserRole, map: PermissionsMap): boolean {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return true;
+  }
+  return hasAnyModuleAction(map, "CLIENTES");
+}
+
+/** Relatório de comandas por cliente (fim de mês etc.). */
+export function canViewCustomerOrders(role: UserRole, map: PermissionsMap): boolean {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return true;
+  }
+  if (hasPermission(map, "FINANCEIRO", "relatorios")) {
+    return true;
+  }
+  return hasPermission(map, "CLIENTES", "ver");
 }
 
 export function parsePermissionsInput(raw: unknown): Partial<PermissionsMap> | null {

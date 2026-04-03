@@ -2,10 +2,12 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import {
+  canAccessClients,
   canAccessKitchen,
   canManageUsers,
   canOpenErp,
   canOpenPdv,
+  canViewCustomerOrders,
   resolvePermissions,
 } from "../lib/permissions.js";
 import { authMiddleware, signToken } from "../middleware/auth.js";
@@ -31,6 +33,8 @@ function serializeSessionUser(user: {
       erp: canOpenErp(user.role, permissions),
       manageUsers: canManageUsers(user.role),
       kitchen: canAccessKitchen(user.role, permissions),
+      clients: canAccessClients(user.role, permissions),
+      customerOrders: canViewCustomerOrders(user.role, permissions),
     },
   };
 }

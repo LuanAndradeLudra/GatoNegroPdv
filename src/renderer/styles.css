@@ -904,3 +904,80 @@ input {
   font-size: 0.8rem;
   color: #81c784;
 }
+
+.customers-toolbar {
+  padding: 0 1.5rem 1rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.customers-search {
+  width: 100%;
+  max-width: 420px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #12141a;
+  color: var(--text);
+}
+
+.customers-textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #12141a;
+  color: var(--text);
+  resize: vertical;
+}
+
+.modal-wide {
+  max-width: 720px;
+}
+
+.customers-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.customers-total {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.customers-report-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.pdv-customer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: #12141a;
+}
+
+.pdv-customer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 200px;
+  flex: 1;
+}
+
+.pdv-customer-field select,
+.pdv-customer-field input {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}

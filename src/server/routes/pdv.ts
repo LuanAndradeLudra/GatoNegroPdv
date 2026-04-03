@@ -31,6 +31,7 @@ pdvRouter.get("/products", async (_req, res) => {
 
 const orderInclude = {
   createdBy: { select: { id: true, name: true, login: true } },
+  customer: { select: { id: true, name: true, phone: true } },
   items: {
     include: {
       product: { select: { name: true, isKitchenItem: true } },
@@ -43,6 +44,8 @@ function serializeOrder(order: {
   id: string;
   kind: OrderKind;
   clientName: string | null;
+  customerId: string | null;
+  customer: { id: string; name: string; phone: string | null } | null;
   status: OrderStatus;
   openedAt: Date;
   closedAt: Date | null;
@@ -75,6 +78,10 @@ function serializeOrder(order: {
     id: order.id,
     kind: order.kind,
     clientName: order.clientName,
+    customerId: order.customerId,
+    customer: order.customer
+      ? { id: order.customer.id, name: order.customer.name, phone: order.customer.phone }
+      : null,
     status: order.status,
     openedAt: order.openedAt.toISOString(),
     closedAt: order.closedAt?.toISOString() ?? null,
@@ -87,12 +94,16 @@ function serializeOrder(order: {
 pdvRouter.get("/orders", async (req, res) => {
   const status = req.query.status as OrderStatus | undefined;
   const kind = req.query.kind as OrderKind | undefined;
+  const customerId = typeof req.query.customerId === "string" ? req.query.customerId.trim() : undefined;
   const where: Prisma.OrderWhereInput = {};
   if (status && ["OPEN", "CLOSED", "CANCELLED"].includes(status)) {
     where.status = status;
   }
   if (kind && ["DIRECT", "COMANDA"].includes(kind)) {
     where.kind = kind;
+  }
+  if (customerId) {
+    where.customerId = customerId;
   }
   const rows = await prisma.order.findMany({
     where,
@@ -123,17 +134,75 @@ pdvRouter.post("/orders", requireOpenCashRegister, async (req, res) => {
   }
   const clientName =
     typeof req.body?.clientName === "string" ? req.body.clientName.trim() || null : null;
+  const customerIdRaw = req.body?.customerId;
+  let customerId: string | null = null;
+  if (typeof customerIdRaw === "string" && customerIdRaw.trim()) {
+    const cust = await prisma.customer.findFirst({
+      where: { id: customerIdRaw.trim(), active: true },
+    });
+    if (!cust) {
+      res.status(400).json({ error: "Cliente não encontrado ou inativo." });
+      return;
+    }
+    customerId = cust.id;
+  }
 
   const created = await prisma.order.create({
     data: {
       kind,
       clientName,
+      customerId,
       createdById: req.user!.sub,
     },
     include: orderInclude,
   });
 
   res.status(201).json({ order: serializeOrder(created) });
+});
+
+pdvRouter.patch("/orders/:id", requireOpenCashRegister, async (req, res) => {
+  const orderId = req.params.id;
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== "OPEN") {
+    res.status(409).json({ error: "Pedido não encontrado ou já encerrado." });
+    return;
+  }
+
+  const data: Prisma.OrderUpdateInput = {};
+
+  if (req.body?.clientName !== undefined) {
+    data.clientName =
+      typeof req.body.clientName === "string" ? req.body.clientName.trim() || null : null;
+  }
+
+  if (req.body?.customerId !== undefined) {
+    const raw = req.body.customerId;
+    if (raw === null || raw === "") {
+      data.customer = { disconnect: true };
+    } else if (typeof raw === "string") {
+      const cust = await prisma.customer.findFirst({
+        where: { id: raw.trim(), active: true },
+      });
+      if (!cust) {
+        res.status(400).json({ error: "Cliente não encontrado ou inativo." });
+        return;
+      }
+      data.customer = { connect: { id: cust.id } };
+    }
+  }
+
+  if (Object.keys(data).length === 0) {
+    res.status(400).json({ error: "Nada para atualizar." });
+    return;
+  }
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data,
+    include: orderInclude,
+  });
+
+  res.json({ order: serializeOrder(updated) });
 });
 
 pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) => {

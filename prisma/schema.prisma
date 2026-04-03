@@ -32,6 +32,19 @@ model User {
   ordersCreated       Order[]         @relation("OrderCreatedBy")
 }
 
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  document  String?
+  email     String?
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
 enum ProductType {
   GELADO
   QUENTE
@@ -72,6 +85,10 @@ enum KitchenItemStatus {
 model Order {
   id          String      @id @default(cuid())
   kind        OrderKind
+  /// Cliente cadastrado (faturamento / relatórios). Opcional.
+  customerId  String?
+  customer    Customer?   @relation(fields: [customerId], references: [id])
+  /// Rótulo rápido (ex.: mesa) quando não há cliente ou como complemento.
   clientName  String?
   status      OrderStatus @default(OPEN)
   openedAt    DateTime    @default(now())

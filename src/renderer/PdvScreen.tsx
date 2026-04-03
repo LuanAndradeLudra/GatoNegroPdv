@@ -1,13 +1,16 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  apiListCustomers,
   apiPdvAddItem,
   apiPdvCloseOrder,
   apiPdvCreateOrder,
   apiPdvOrder,
   apiPdvOrders,
+  apiPdvPatchOrder,
   apiPdvProducts,
   apiPdvRemoveItem,
   apiPdvUpdateItemQty,
+  type CustomerRow,
   type PdvOrder,
   type PdvProduct,
 } from "./api";
@@ -33,13 +36,17 @@ type Step = "menu" | "selling";
 export function PdvScreen({ onBack }: { onBack: () => void }) {
   const { state } = useAuth();
   const token = state.status === "authenticated" ? state.token : null;
+  const accessClients = state.status === "authenticated" && state.user.access.clients;
 
   const [step, setStep] = useState<Step>("menu");
   const [order, setOrder] = useState<PdvOrder | null>(null);
   const [products, setProducts] = useState<PdvProduct[]>([]);
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [openComandas, setOpenComandas] = useState<PdvOrder[]>([]);
   const [filter, setFilter] = useState("");
   const [comandaName, setComandaName] = useState("");
+  const [mesaEdit, setMesaEdit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -66,6 +73,21 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     void loadProducts().catch(() => setError("Não foi possível carregar produtos."));
     void loadOpenComandas();
   }, [token, loadProducts, loadOpenComandas]);
+
+  useEffect(() => {
+    if (!token || !accessClients) {
+      return;
+    }
+    void apiListCustomers(token)
+      .then(setCustomers)
+      .catch(() => setCustomers([]));
+  }, [token, accessClients]);
+
+  useEffect(() => {
+    if (order?.kind === "COMANDA") {
+      setMesaEdit(order.clientName ?? "");
+    }
+  }, [order?.id, order?.kind, order?.clientName]);
 
   const filteredProducts = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -101,8 +123,13 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       const name = comandaName.trim() || null;
-      const o = await apiPdvCreateOrder(token, { kind: "COMANDA", clientName: name });
+      const o = await apiPdvCreateOrder(token, {
+        kind: "COMANDA",
+        clientName: name,
+        customerId: selectedCustomerId || null,
+      });
       setComandaName("");
+      setSelectedCustomerId("");
       setOrder(o);
       setStep("selling");
       await loadOpenComandas();
@@ -216,7 +243,11 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
           <div className="pdv-toolbar-title">
             <h1 className="users-title">
               {order.kind === "DIRECT" ? "Venda direta" : "Comanda"}
-              {order.clientName ? ` — ${order.clientName}` : null}
+              {order.kind === "COMANDA" && order.customer
+                ? ` — ${order.customer.name}`
+                : order.clientName
+                  ? ` — ${order.clientName}`
+                  : null}
             </h1>
             <p className="pdv-sub">Pedido #{order.id.slice(0, 8)} · {order.status}</p>
           </div>
@@ -225,6 +256,72 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
           </button>
         </header>
         {error ? <p className="users-error pdv-banner">{error}</p> : null}
+        {order.kind === "COMANDA" && accessClients ? (
+          <div className="pdv-customer-bar">
+            <label className="pdv-customer-field">
+              <span>Cliente cadastrado</span>
+              <select
+                value={order.customerId ?? ""}
+                disabled={busy}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  void (async () => {
+                    if (!token) {
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      const next = await apiPdvPatchOrder(token, order.id, {
+                        customerId: v || null,
+                      });
+                      setOrder(next);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Erro ao vincular cliente");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                <option value="">— Sem vínculo (só mesa/nome) —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="pdv-customer-field">
+              <span>Mesa / observação</span>
+              <input
+                value={mesaEdit}
+                onChange={(e) => setMesaEdit(e.target.value)}
+                disabled={busy}
+                onBlur={() => {
+                  void (async () => {
+                    if (!token) {
+                      return;
+                    }
+                    const v = mesaEdit.trim() || null;
+                    const prev = order.clientName ?? null;
+                    if (v === prev) {
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      const next = await apiPdvPatchOrder(token, order.id, { clientName: v });
+                      setOrder(next);
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Erro ao salvar");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              />
+            </label>
+          </div>
+        ) : null}
         <div className="pdv-split">
           <section className="pdv-panel">
             <input
@@ -333,11 +430,28 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
           </button>
           <div className="pdv-mode-card pdv-comanda-card">
             <h2>Comanda</h2>
-            <p>Nome opcional (comanda rápida).</p>
+            <p>Cliente cadastrado (relatório) ou só mesa/nome rápido.</p>
             <form onSubmit={(e) => void startComanda(e)} className="pdv-comanda-form">
+              {accessClients ? (
+                <label className="field">
+                  <span>Cliente (faturamento)</span>
+                  <select
+                    value={selectedCustomerId}
+                    onChange={(e) => setSelectedCustomerId(e.target.value)}
+                    disabled={busy}
+                  >
+                    <option value="">— Não usar cadastro —</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <input
                 type="text"
-                placeholder="Mesa / cliente (opcional)"
+                placeholder="Mesa / apelido (opcional)"
                 value={comandaName}
                 onChange={(e) => setComandaName(e.target.value)}
                 disabled={busy}
@@ -357,7 +471,7 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
               {openComandas.map((o) => (
                 <li key={o.id}>
                   <button type="button" className="pdv-chip" onClick={() => void resumeComanda(o)} disabled={busy}>
-                    {o.clientName || "Sem nome"} · {money.format(o.subtotal)}
+                    {o.customer?.name ?? o.clientName ?? "Sem nome"} · {money.format(o.subtotal)}
                   </button>
                 </li>
               ))}

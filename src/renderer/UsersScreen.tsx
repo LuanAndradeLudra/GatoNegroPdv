@@ -27,6 +27,7 @@ const MODULE_LABELS: Record<PermissionModule, string> = {
   ESTOQUE: "Estoque",
   FINANCEIRO: "Financeiro",
   COZINHA: "Cozinha",
+  CLIENTES: "Clientes",
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -37,18 +38,21 @@ const ACTION_LABELS: Record<string, string> = {
   saida: "Saída",
   ajuste: "Ajuste",
   relatorios: "Ver relatórios",
-  ver: "Ver pedidos",
+  ver: "Ver pedidos / listar",
   atualizar: "Atualizar pedidos",
+  cadastrar: "Cadastrar",
+  editar: "Editar",
 };
 
 type ModalMode = "create" | "edit" | null;
 
 function cloneMap(m: PermissionsMap): PermissionsMap {
   return {
-    VENDAS: [...m.VENDAS],
-    ESTOQUE: [...m.ESTOQUE],
-    FINANCEIRO: [...m.FINANCEIRO],
-    COZINHA: [...m.COZINHA],
+    VENDAS: [...(m.VENDAS ?? [])],
+    ESTOQUE: [...(m.ESTOQUE ?? [])],
+    FINANCEIRO: [...(m.FINANCEIRO ?? [])],
+    COZINHA: [...(m.COZINHA ?? [])],
+    CLIENTES: [...(m.CLIENTES ?? [])],
   };
 }
 

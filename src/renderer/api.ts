@@ -20,7 +20,7 @@ export type UserRole =
   | "COZINHA"
   | "CONFERENTE";
 
-export type PermissionModule = "VENDAS" | "ESTOQUE" | "FINANCEIRO" | "COZINHA";
+export type PermissionModule = "VENDAS" | "ESTOQUE" | "FINANCEIRO" | "COZINHA" | "CLIENTES";
 
 export type PermissionsMap = Record<PermissionModule, string[]>;
 
@@ -29,6 +29,9 @@ export type UserAccess = {
   erp: boolean;
   manageUsers: boolean;
   kitchen: boolean;
+  clients: boolean;
+  /** Relatório de comandas por cliente (financeiro / listagem). */
+  customerOrders: boolean;
 };
 
 export type User = {
@@ -218,6 +221,8 @@ export type PdvOrderItem = {
 export type PdvOrder = {
   id: string;
   kind: "DIRECT" | "COMANDA";
+  customerId: string | null;
+  customer: { id: string; name: string; phone: string | null } | null;
   clientName: string | null;
   status: "OPEN" | "CLOSED" | "CANCELLED";
   openedAt: string;
@@ -235,7 +240,7 @@ export async function apiPdvProducts(token: string): Promise<PdvProduct[]> {
 
 export async function apiPdvOrders(
   token: string,
-  q?: { status?: PdvOrder["status"]; kind?: PdvOrder["kind"] },
+  q?: { status?: PdvOrder["status"]; kind?: PdvOrder["kind"]; customerId?: string },
 ): Promise<PdvOrder[]> {
   const params = new URLSearchParams();
   if (q?.status) {
@@ -243,6 +248,9 @@ export async function apiPdvOrders(
   }
   if (q?.kind) {
     params.set("kind", q.kind);
+  }
+  if (q?.customerId) {
+    params.set("customerId", q.customerId);
   }
   const qs = params.toString();
   const res = await fetch(`/api/pdv/orders${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
@@ -258,10 +266,24 @@ export async function apiPdvOrder(token: string, id: string): Promise<PdvOrder> 
 
 export async function apiPdvCreateOrder(
   token: string,
-  body: { kind: "DIRECT" | "COMANDA"; clientName?: string | null },
+  body: { kind: "DIRECT" | "COMANDA"; clientName?: string | null; customerId?: string | null },
 ): Promise<PdvOrder> {
   const res = await fetch("/api/pdv/orders", {
     method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvPatchOrder(
+  token: string,
+  orderId: string,
+  body: { clientName?: string | null; customerId?: string | null },
+): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}`, {
+    method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(body),
   });
@@ -325,6 +347,107 @@ export async function apiPdvCloseOrder(token: string, orderId: string): Promise<
   });
   const data = await parseJson<{ order: PdvOrder }>(res);
   return data.order;
+}
+
+export type CustomerRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  document: string | null;
+  email: string | null;
+  notes: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function apiListCustomers(token: string, q?: string): Promise<CustomerRow[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  const res = await fetch(`/api/customers${qs}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ customers: CustomerRow[] }>(res);
+  return data.customers;
+}
+
+export async function apiCreateCustomer(
+  token: string,
+  body: { name: string; phone?: string | null; document?: string | null; email?: string | null; notes?: string | null },
+): Promise<CustomerRow> {
+  const res = await fetch("/api/customers", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ customer: CustomerRow }>(res);
+  return data.customer;
+}
+
+export async function apiUpdateCustomer(
+  token: string,
+  id: string,
+  body: Partial<{
+    name: string;
+    phone: string | null;
+    document: string | null;
+    email: string | null;
+    notes: string | null;
+    active: boolean;
+  }>,
+): Promise<CustomerRow> {
+  const res = await fetch(`/api/customers/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ customer: CustomerRow }>(res);
+  return data.customer;
+}
+
+export type CustomerOrderReportLine = {
+  id: string;
+  kind: string;
+  clientName: string | null;
+  customer: { id: string; name: string; phone: string | null } | null;
+  status: string;
+  openedAt: string;
+  closedAt: string | null;
+  subtotal: number;
+  createdBy: { id: string; name: string; login: string };
+  items: { productName: string; quantity: number; unitPrice: number; lineTotal: number }[];
+};
+
+export async function apiCustomerOrdersReport(
+  token: string,
+  customerId: string,
+  q: {
+    from?: string;
+    to?: string;
+    status?: "OPEN" | "CLOSED" | "CANCELLED";
+    kind?: "DIRECT" | "COMANDA";
+  },
+): Promise<{
+  customer: { id: string; name: string };
+  filter: { from: string; to: string; status: string; kind: string };
+  orders: CustomerOrderReportLine[];
+  total: number;
+}> {
+  const params = new URLSearchParams();
+  if (q.from) {
+    params.set("from", q.from);
+  }
+  if (q.to) {
+    params.set("to", q.to);
+  }
+  if (q.status) {
+    params.set("status", q.status);
+  }
+  if (q.kind) {
+    params.set("kind", q.kind);
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/customers/${customerId}/orders${qs ? `?${qs}` : ""}`, {
+    headers: authHeaders(token),
+  });
+  return parseJson(res);
 }
 
 export type KitchenBoardItem = {
