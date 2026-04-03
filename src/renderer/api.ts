@@ -145,3 +145,49 @@ export async function apiDeleteUser(token: string, id: string): Promise<void> {
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   throw new Error(data.error ?? `Erro HTTP ${res.status}`);
 }
+
+export type CashOperator = { id: string; name: string; login: string };
+
+export type CashSession = {
+  id: string;
+  openedAt: string;
+  initialValue: number;
+  closedAt: string | null;
+  closingBalance: number | null;
+  openedBy: CashOperator;
+  closedBy: CashOperator | null;
+};
+
+export async function apiCashCurrent(token: string): Promise<CashSession | null> {
+  const res = await fetch("/api/cash-register/current", { headers: authHeaders(token) });
+  const data = await parseJson<{ current: CashSession | null }>(res);
+  return data.current;
+}
+
+export async function apiCashHistory(token: string, limit = 50): Promise<CashSession[]> {
+  const res = await fetch(`/api/cash-register/history?limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+  const data = await parseJson<{ sessions: CashSession[] }>(res);
+  return data.sessions;
+}
+
+export async function apiCashOpen(token: string, initialValue: number): Promise<CashSession> {
+  const res = await fetch("/api/cash-register/open", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ initialValue }),
+  });
+  const data = await parseJson<{ session: CashSession }>(res);
+  return data.session;
+}
+
+export async function apiCashClose(token: string, closingBalance?: number | null): Promise<CashSession> {
+  const res = await fetch("/api/cash-register/close", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ closingBalance: closingBalance ?? undefined }),
+  });
+  const data = await parseJson<{ session: CashSession }>(res);
+  return data.session;
+}

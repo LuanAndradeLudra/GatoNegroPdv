@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
+import { cashRegisterRouter } from "./routes/cashRegister.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -15,6 +16,7 @@ export function createApp(): express.Application {
 
   app.use("/api/auth", authRouter);
   app.use("/api/users", usersRouter);
+  app.use("/api/cash-register", cashRegisterRouter);
 
   if (process.env.NODE_ENV === "production") {
     const staticDir = path.join(process.cwd(), "dist");

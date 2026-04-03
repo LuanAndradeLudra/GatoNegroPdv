@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { CashRegisterScreen } from "./CashRegisterScreen";
 import { useAuth } from "./AuthContext";
 import { UsersScreen } from "./UsersScreen";
 
 export function HubScreen() {
   const { state, logout } = useAuth();
-  const [view, setView] = useState<"hub" | "users">("hub");
+  const [view, setView] = useState<"hub" | "users" | "caixa">("hub");
 
   if (state.status !== "authenticated") {
     return null;
@@ -15,6 +16,10 @@ export function HubScreen() {
 
   if (view === "users" && access.manageUsers) {
     return <UsersScreen onBack={() => setView("hub")} />;
+  }
+
+  if (view === "caixa" && access.pdv) {
+    return <CashRegisterScreen onBack={() => setView("hub")} />;
   }
 
   return (
@@ -42,6 +47,11 @@ export function HubScreen() {
       <main className="hub-main">
         <p className="hub-hint">Escolha o módulo (conforme seu nível de acesso)</p>
         <div className="hub-actions">
+          {access.pdv ? (
+            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("caixa")}>
+              Caixa
+            </button>
+          ) : null}
           <button
             type="button"
             className="hub-tile"

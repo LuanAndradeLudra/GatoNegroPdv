@@ -26,4 +26,20 @@ model User {
   permissions Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  cashRegistersOpened CashRegister[] @relation("CashOpenedBy")
+  cashRegistersClosed CashRegister[] @relation("CashClosedBy")
+}
+
+model CashRegister {
+  id             String    @id @default(cuid())
+  openedById     String
+  openedBy       User      @relation("CashOpenedBy", fields: [openedById], references: [id])
+  openedAt       DateTime @default(now())
+  initialValue   Float
+  closedAt       DateTime?
+  closedById     String?
+  closedBy       User?    @relation("CashClosedBy", fields: [closedById], references: [id])
+  /// Valor contado ao fechar (opcional).
+  closingBalance Float?
 }
