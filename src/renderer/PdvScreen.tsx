@@ -15,6 +15,19 @@ import { useAuth } from "./AuthContext";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+function kitchenStatusLabel(status: string | null): string | null {
+  if (!status) {
+    return null;
+  }
+  const m: Record<string, string> = {
+    PENDING: "Cozinha: pendente",
+    QUEUE: "Cozinha: na fila",
+    PREPARING: "Cozinha: preparando",
+    READY: "Cozinha: pronto",
+  };
+  return m[status] ?? status;
+}
+
 type Step = "menu" | "selling";
 
 export function PdvScreen({ onBack }: { onBack: () => void }) {
@@ -249,6 +262,9 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
                   <li key={i.id} className="pdv-cart-line">
                     <div>
                       <strong>{i.productName}</strong>
+                      {i.isKitchenItem && i.kitchenStatus ? (
+                        <span className="pdv-kitchen-badge">{kitchenStatusLabel(i.kitchenStatus)}</span>
+                      ) : null}
                       <div className="pdv-cart-line-price">
                         {money.format(i.unitPrice)} ×{" "}
                         <span className="pdv-qty-controls">

@@ -117,6 +117,25 @@ export function canOpenErp(role: UserRole, map: PermissionsMap): boolean {
   return false;
 }
 
+/** Tela cozinha: ver fila / status. */
+export function canAccessKitchen(role: UserRole, map: PermissionsMap): boolean {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return true;
+  }
+  if (role === "COZINHA") {
+    return true;
+  }
+  return hasPermission(map, "COZINHA", "ver") || hasPermission(map, "COZINHA", "atualizar");
+}
+
+/** Avançar status (preparar / pronto). */
+export function canUpdateKitchen(role: UserRole, map: PermissionsMap): boolean {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return true;
+  }
+  return hasPermission(map, "COZINHA", "atualizar");
+}
+
 export function parsePermissionsInput(raw: unknown): Partial<PermissionsMap> | null {
   if (raw == null) {
     return null;

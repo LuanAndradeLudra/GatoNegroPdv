@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { CashRegisterScreen } from "./CashRegisterScreen";
+import { KitchenScreen } from "./KitchenScreen";
 import { useAuth } from "./AuthContext";
 import { PdvScreen } from "./PdvScreen";
 import { UsersScreen } from "./UsersScreen";
 
 export function HubScreen() {
   const { state, logout } = useAuth();
-  const [view, setView] = useState<"hub" | "users" | "caixa" | "pdv">("hub");
+  const [view, setView] = useState<"hub" | "users" | "caixa" | "pdv" | "cozinha">("hub");
 
   if (state.status !== "authenticated") {
     return null;
@@ -27,6 +28,10 @@ export function HubScreen() {
     return <PdvScreen onBack={() => setView("hub")} />;
   }
 
+  if (view === "cozinha" && access.kitchen) {
+    return <KitchenScreen onBack={() => setView("hub")} />;
+  }
+
   return (
     <div className="hub-layout">
       <header className="hub-header">
@@ -43,6 +48,7 @@ export function HubScreen() {
             ) : (
               <span className="tag tag-off">Gestão de usuários</span>
             )}
+            {access.kitchen ? <span className="tag tag-on">Cozinha</span> : <span className="tag tag-off">Cozinha</span>}
           </p>
         </div>
         <button type="button" className="btn-ghost" onClick={logout}>
@@ -77,6 +83,11 @@ export function HubScreen() {
           {access.manageUsers ? (
             <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("users")}>
               Usuários
+            </button>
+          ) : null}
+          {access.kitchen ? (
+            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("cozinha")}>
+              Cozinha
             </button>
           ) : null}
         </div>

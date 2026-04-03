@@ -28,6 +28,7 @@ export type UserAccess = {
   pdv: boolean;
   erp: boolean;
   manageUsers: boolean;
+  kitchen: boolean;
 };
 
 export type User = {
@@ -324,4 +325,34 @@ export async function apiPdvCloseOrder(token: string, orderId: string): Promise<
   });
   const data = await parseJson<{ order: PdvOrder }>(res);
   return data.order;
+}
+
+export type KitchenBoardItem = {
+  itemId: string;
+  orderId: string;
+  orderKind: "DIRECT" | "COMANDA";
+  clientName: string | null;
+  orderOpenedAt: string;
+  minutesWaiting: number;
+  productName: string;
+  quantity: number;
+  kitchenStatus: "PENDING" | "QUEUE" | "PREPARING" | "READY";
+};
+
+export async function apiKitchenBoard(token: string): Promise<{ items: KitchenBoardItem[]; serverTime: string }> {
+  const res = await fetch("/api/kitchen/board", { headers: authHeaders(token) });
+  return parseJson(res);
+}
+
+export async function apiKitchenSetStatus(
+  token: string,
+  itemId: string,
+  status: "PREPARING" | "READY",
+): Promise<{ item: KitchenBoardItem }> {
+  const res = await fetch(`/api/kitchen/items/${itemId}/status`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ status }),
+  });
+  return parseJson(res);
 }
