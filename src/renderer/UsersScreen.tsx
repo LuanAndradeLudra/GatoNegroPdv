@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { UserPlus } from "lucide-react";
 import {
   apiCreateUser,
   apiDeleteUser,
@@ -12,6 +13,10 @@ import {
   type UserRole,
 } from "./api";
 import { useAuth } from "./AuthContext";
+import { cn } from "./lib/cn";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
+import { Table, TBody, Td, Th, THead, Tr } from "./ui/Table";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrador",
@@ -44,6 +49,15 @@ const ACTION_LABELS: Record<string, string> = {
   editar: "Editar",
 };
 
+const ROLE_BADGE: Record<UserRole, string> = {
+  ADMIN: "border-amber-500/30 bg-amber-500/15 text-amber-100",
+  GERENTE: "border-violet-500/30 bg-violet-500/15 text-violet-200",
+  VENDEDOR: "border-sky-500/30 bg-sky-500/15 text-sky-200",
+  ESTOQUE: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
+  COZINHA: "border-orange-500/30 bg-orange-500/15 text-orange-200",
+  CONFERENTE: "border-zinc-500/30 bg-zinc-500/15 text-zinc-300",
+};
+
 type ModalMode = "create" | "edit" | null;
 
 function cloneMap(m: PermissionsMap): PermissionsMap {
@@ -56,7 +70,20 @@ function cloneMap(m: PermissionsMap): PermissionsMap {
   };
 }
 
-export function UsersScreen({ onBack }: { onBack: () => void }) {
+function RoleBadge({ role }: { role: UserRole }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide",
+        ROLE_BADGE[role],
+      )}
+    >
+      {ROLE_LABELS[role]}
+    </span>
+  );
+}
+
+export function UsersScreen() {
   const { state, refreshUser } = useAuth();
   const token = state.status === "authenticated" ? state.token : null;
 
@@ -216,87 +243,109 @@ export function UsersScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="users-layout">
-      <header className="users-toolbar">
-        <button type="button" className="btn-ghost" onClick={onBack}>
-          ← Voltar
-        </button>
-        <h1 className="users-title">Usuários</h1>
-        <button type="button" className="btn-primary btn-small" onClick={openCreate} disabled={!schema || busy}>
+    <div className="relative min-h-full px-4 pb-28 pt-2 sm:px-6">
+      <div className="mb-4 flex items-center justify-end">
+        <Button type="button" className="hidden sm:inline-flex" onClick={openCreate} disabled={!schema || busy}>
           Novo usuário
-        </button>
-      </header>
-
-      {loadError ? <p className="users-error">{loadError}</p> : null}
-
-      <div className="users-table-wrap">
-        <table className="users-table">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Login</th>
-              <th>Papel</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.name}</td>
-                <td className="mono">{u.login}</td>
-                <td>{ROLE_LABELS[u.role]}</td>
-                <td className="users-actions">
-                  <button type="button" className="btn-link" onClick={() => openEdit(u)} disabled={busy}>
-                    Editar
-                  </button>
-                  <button type="button" className="btn-link danger" onClick={() => void onDelete(u)} disabled={busy}>
-                    Excluir
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        </Button>
       </div>
 
+      {loadError ? <p className="mb-4 text-sm text-red-400">{loadError}</p> : null}
+
+      <Table>
+        <THead>
+          <tr>
+            <Th>Nome</Th>
+            <Th>Login</Th>
+            <Th>Papel</Th>
+            <Th className="text-right">Ações</Th>
+          </tr>
+        </THead>
+        <TBody>
+          {users.map((u) => (
+            <Tr key={u.id}>
+              <Td className="max-w-[200px] truncate font-medium text-zinc-200">{u.name}</Td>
+              <Td className="font-mono text-xs text-zinc-400">{u.login}</Td>
+              <Td>
+                <RoleBadge role={u.role} />
+              </Td>
+              <Td className="text-right">
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-amber-400/90 hover:text-amber-300"
+                    onClick={() => openEdit(u)}
+                    disabled={busy}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-red-400/90 hover:text-red-300"
+                    onClick={() => void onDelete(u)}
+                    disabled={busy}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </Table>
+
+      <button
+        type="button"
+        onClick={openCreate}
+        disabled={!schema || busy}
+        title="Novo usuário"
+        className="fixed bottom-8 right-8 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-600 text-zinc-950 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/40 transition hover:brightness-105 disabled:opacity-40 sm:hidden"
+      >
+        <UserPlus className="h-6 w-6" strokeWidth={2} />
+      </button>
+
       {modal && formPerms && schema ? (
-        <div className="modal-backdrop" role="presentation" onClick={closeModal}>
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-[2px]"
+          role="presentation"
+          onClick={closeModal}
+        >
           <div
-            className="modal-panel"
+            className="my-8 w-full max-w-lg rounded-xl border border-white/[0.1] bg-[#1e1e1e]/95 p-6 shadow-2xl backdrop-blur-xl"
             role="dialog"
             aria-modal
             onClick={(ev) => ev.stopPropagation()}
           >
-            <h2 className="modal-title">{modal === "create" ? "Novo usuário" : "Editar usuário"}</h2>
-            <form className="modal-form" onSubmit={(e) => void onSubmit(e)}>
-              <label className="field">
-                <span>Nome</span>
-                <input value={formName} onChange={(e) => setFormName(e.target.value)} required disabled={busy} />
-              </label>
-              <label className="field">
-                <span>Login</span>
-                <input
-                  value={formLogin}
-                  onChange={(e) => setFormLogin(e.target.value)}
-                  required
+            <h2 className="text-lg font-semibold text-zinc-100">
+              {modal === "create" ? "Novo usuário" : "Editar usuário"}
+            </h2>
+            <form className="mt-4 flex flex-col gap-3" onSubmit={(e) => void onSubmit(e)}>
+              <Input label="Nome" value={formName} onChange={(e) => setFormName(e.target.value)} required disabled={busy} />
+              <Input
+                label="Login"
+                value={formLogin}
+                onChange={(e) => setFormLogin(e.target.value)}
+                required
+                disabled={busy}
+                autoComplete="off"
+              />
+              <Input
+                type="password"
+                label={modal === "create" ? "Senha" : "Nova senha (deixe em branco para manter)"}
+                value={formPassword}
+                onChange={(e) => setFormPassword(e.target.value)}
+                required={modal === "create"}
+                disabled={busy}
+                autoComplete="new-password"
+              />
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-zinc-500">
+                Papel
+                <select
+                  className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
+                  value={formRole}
+                  onChange={(e) => onRoleChange(e.target.value as UserRole)}
                   disabled={busy}
-                  autoComplete="off"
-                />
-              </label>
-              <label className="field">
-                <span>{modal === "create" ? "Senha" : "Nova senha (deixe em branco para manter)"}</span>
-                <input
-                  type="password"
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
-                  required={modal === "create"}
-                  disabled={busy}
-                  autoComplete="new-password"
-                />
-              </label>
-              <label className="field">
-                <span>Papel</span>
-                <select value={formRole} onChange={(e) => onRoleChange(e.target.value as UserRole)} disabled={busy}>
+                >
                   {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
                     <option key={r} value={r}>
                       {ROLE_LABELS[r]}
@@ -305,37 +354,40 @@ export function UsersScreen({ onBack }: { onBack: () => void }) {
                 </select>
               </label>
 
-              <fieldset className="perm-fieldset">
-                <legend>Permissões por módulo</legend>
-                {schema.modules.map((mod) => (
-                  <div key={mod} className="perm-module">
-                    <h4>{MODULE_LABELS[mod]}</h4>
-                    <div className="perm-actions">
-                      {schema.actions[mod].map((action) => (
-                        <label key={action} className="perm-check">
-                          <input
-                            type="checkbox"
-                            checked={formPerms[mod].includes(action)}
-                            onChange={() => toggleAction(mod, action)}
-                            disabled={busy}
-                          />
-                          {ACTION_LABELS[action] ?? action}
-                        </label>
-                      ))}
+              <fieldset className="mt-2 border-t border-white/[0.08] pt-4">
+                <legend className="text-sm font-semibold text-zinc-300">Permissões por módulo</legend>
+                <div className="mt-3 max-h-[40vh] space-y-4 overflow-y-auto pr-1">
+                  {schema.modules.map((mod) => (
+                    <div key={mod}>
+                      <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{MODULE_LABELS[mod]}</h4>
+                      <div className="flex flex-col gap-2">
+                        {schema.actions[mod].map((action) => (
+                          <label key={action} className="flex cursor-pointer items-center gap-2 text-sm text-zinc-400">
+                            <input
+                              type="checkbox"
+                              className="rounded border-white/20 bg-zinc-900 text-amber-600"
+                              checked={formPerms[mod].includes(action)}
+                              onChange={() => toggleAction(mod, action)}
+                              disabled={busy}
+                            />
+                            {ACTION_LABELS[action] ?? action}
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </fieldset>
 
-              {formError ? <p className="login-error">{formError}</p> : null}
+              {formError ? <p className="text-sm text-red-400">{formError}</p> : null}
 
-              <div className="modal-actions">
-                <button type="button" className="btn-ghost" onClick={closeModal} disabled={busy}>
+              <div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4">
+                <Button type="button" variant="outline" onClick={closeModal} disabled={busy}>
                   Cancelar
-                </button>
-                <button type="submit" className="btn-primary" disabled={busy}>
+                </Button>
+                <Button type="submit" disabled={busy}>
                   {busy ? "Salvando…" : "Salvar"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>

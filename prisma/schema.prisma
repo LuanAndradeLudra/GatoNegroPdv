@@ -29,6 +29,7 @@ model User {
 
   cashRegistersOpened CashRegister[] @relation("CashOpenedBy")
   cashRegistersClosed CashRegister[] @relation("CashClosedBy")
+  cashMovements       CashMovement[] @relation("CashMovementCreatedBy")
   ordersCreated       Order[]         @relation("OrderCreatedBy")
 }
 
@@ -93,9 +94,51 @@ model Order {
   status      OrderStatus @default(OPEN)
   openedAt    DateTime    @default(now())
   closedAt    DateTime?
+  /// Última interação no pedido (itens) — usado para ordenar comandas “paradas”.
+  lastActivityAt DateTime @default(now())
+  cancelledAt DateTime?
+  /// Turno de caixa em que o pedido foi fechado (reabrir só se o mesmo caixa ainda estiver aberto).
+  closedCashRegisterId String?
+  closedCashRegister   CashRegister? @relation("OrderClosedInCash", fields: [closedCashRegisterId], references: [id], onDelete: SetNull)
   createdById String
   createdBy   User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
   items       OrderItem[]
+  payments    OrderPayment[]
+}
+
+enum PaymentMethodKind {
+  DINHEIRO
+  DEBITO
+  CREDITO
+  VALE
+}
+
+model PaymentMethod {
+  id         String            @id @default(cuid())
+  name       String
+  kind       PaymentMethodKind
+  /// Taxa percentual opcional (ex.: 3 = 3%). Aplicada sobre o valor bruto no fechamento.
+  feePercent Float?
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  payments   OrderPayment[]
+}
+
+model OrderPayment {
+  id              String         @id @default(cuid())
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethodId String
+  paymentMethod   PaymentMethod  @relation(fields: [paymentMethodId], references: [id])
+  /// Valor bruto pago nesta parcela (o que entra na soma do pedido).
+  amountPaid      Float
+  feeAmount       Float
+  /// Valor líquido após taxa da maquininha (fim de mês).
+  netAmount       Float
+  /// Só para DINHEIRO: valor que o cliente entregou (para cálculo de troco).
+  cashReceived    Float?
+  createdAt       DateTime       @default(now())
 }
 
 model OrderItem {
@@ -109,15 +152,49 @@ model OrderItem {
   kitchenStatus KitchenItemStatus?
 }
 
+enum CashShift {
+  MANHA
+  TARDE
+  NOITE
+  CUSTOM
+}
+
+enum CashMovementType {
+  SANGRIA
+  SUPRIMENTO
+}
+
 model CashRegister {
-  id             String    @id @default(cuid())
-  openedById     String
-  openedBy       User      @relation("CashOpenedBy", fields: [openedById], references: [id])
-  openedAt       DateTime @default(now())
-  initialValue   Float
-  closedAt       DateTime?
-  closedById     String?
-  closedBy       User?    @relation("CashClosedBy", fields: [closedById], references: [id])
+  id               String    @id @default(cuid())
+  openedById       String
+  openedBy         User      @relation("CashOpenedBy", fields: [openedById], references: [id])
+  openedAt         DateTime  @default(now())
+  initialValue     Float
+  /// Turno declarado na abertura (relatórios).
+  shift            CashShift @default(MANHA)
+  /// Rótulo quando shift = CUSTOM.
+  shiftCustomLabel String?
+  /// Observações do operador na abertura.
+  openingNotes     String?
+  /// Conferência opcional: mapa valor da cédula/moeda (string) → quantidade.
+  denominationsJson Json?
+  closedAt         DateTime?
+  closedById       String?
+  closedBy         User?     @relation("CashClosedBy", fields: [closedById], references: [id])
   /// Valor contado ao fechar (opcional).
-  closingBalance Float?
+  closingBalance   Float?
+  movements        CashMovement[]
+  ordersClosed     Order[]       @relation("OrderClosedInCash")
+}
+
+model CashMovement {
+  id             String           @id @default(cuid())
+  cashRegisterId String
+  cashRegister   CashRegister     @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  type           CashMovementType
+  amount         Float
+  note           String?
+  createdById    String
+  createdBy      User             @relation("CashMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
 }

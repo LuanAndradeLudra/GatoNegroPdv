@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiKitchenBoard, apiKitchenSetStatus, type KitchenBoardItem } from "./api";
 import { useAuth } from "./AuthContext";
+import { Button } from "./ui/Button";
 
 const BOARD_COLUMNS: {
   title: string;
@@ -18,7 +19,7 @@ function orderLabel(kind: KitchenBoardItem["orderKind"], clientName: string | nu
   return "Balcão";
 }
 
-export function KitchenScreen({ onBack }: { onBack: () => void }) {
+export function KitchenScreen() {
   const { state } = useAuth();
   const token = state.status === "authenticated" ? state.token : null;
   const user = state.status === "authenticated" ? state.user : null;
@@ -79,73 +80,76 @@ export function KitchenScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <div className="kitchen-layout">
-      <header className="kitchen-toolbar">
-        <button type="button" className="btn-ghost" onClick={onBack}>
-          ← Voltar
-        </button>
-        <div className="kitchen-toolbar-center">
-          <h1 className="users-title">Cozinha</h1>
-          <p className="kitchen-sync">
-            Pedidos do PDV aparecem automaticamente na fila ·{" "}
-            {lastSync ? `sync ${new Date(lastSync).toLocaleTimeString("pt-BR")}` : "…"} · a cada 3s
+    <div className="flex min-h-full flex-col">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.08] px-4 py-3 sm:px-6">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] text-zinc-500">
+            Pedidos do PDV na fila · {lastSync ? `sync ${new Date(lastSync).toLocaleTimeString("pt-BR")}` : "…"} · a cada 3s
           </p>
         </div>
-        <button type="button" className="btn-ghost" onClick={() => void load()} disabled={!!busyId}>
+        <Button type="button" variant="outline" className="!py-2 text-xs" onClick={() => void load()} disabled={!!busyId}>
           Atualizar
-        </button>
-      </header>
+        </Button>
+      </div>
 
-      {error ? <p className="users-error kitchen-banner">{error}</p> : null}
+      {error ? <p className="border-b border-red-500/20 bg-red-950/30 px-4 py-2 text-sm text-red-300 sm:px-6">{error}</p> : null}
 
       {!canUpdate ? (
-        <p className="kitchen-readonly">Somente visualização — sem permissão para alterar status.</p>
+        <p className="px-4 py-2 text-sm text-zinc-500 sm:px-6">Somente visualização — sem permissão para alterar status.</p>
       ) : null}
 
-      <div className="kitchen-board">
+      <div className="grid flex-1 grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-6">
         {BOARD_COLUMNS.map((col) => (
-          <section key={col.title} className="kitchen-column">
-            <h2 className="kitchen-column-title">
+          <section
+            key={col.title}
+            className="flex min-h-[200px] flex-col rounded-xl border border-white/[0.08] bg-[#161616]/80 backdrop-blur-sm"
+          >
+            <h2 className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5 text-sm font-semibold text-zinc-200">
               {col.title}
-              <span className="kitchen-count">{itemsInColumn(col.statuses).length}</span>
+              <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-normal text-zinc-400">
+                {itemsInColumn(col.statuses).length}
+              </span>
             </h2>
-            <div className="kitchen-cards">
+            <div className="flex max-h-[calc(100vh-220px)] flex-col gap-2 overflow-auto p-2">
               {itemsInColumn(col.statuses).map((item) => (
-                <article key={item.itemId} className="kitchen-card">
-                  <header className="kitchen-card-head">
-                    <span className="kitchen-order-tag">{orderLabel(item.orderKind, item.clientName)}</span>
-                    <span className="kitchen-wait" title="Tempo desde a abertura do pedido">
+                <article
+                  key={item.itemId}
+                  className="rounded-lg border border-white/[0.08] bg-[#1e1e1e]/90 p-3 shadow-sm"
+                >
+                  <header className="mb-2 flex justify-between gap-2">
+                    <span className="text-xs text-zinc-500">{orderLabel(item.orderKind, item.clientName)}</span>
+                    <span className="whitespace-nowrap text-[11px] font-semibold text-amber-500/90" title="Tempo desde a abertura do pedido">
                       {item.minutesWaiting} min
                     </span>
                   </header>
-                  <p className="kitchen-product">
-                    <strong>{item.productName}</strong>
-                    <span className="kitchen-qty">× {item.quantity}</span>
+                  <p className="mb-2 text-sm">
+                    <strong className="text-zinc-100">{item.productName}</strong>
+                    <span className="ml-1.5 text-zinc-500">× {item.quantity}</span>
                   </p>
                   {canUpdate ? (
-                    <div className="kitchen-actions">
+                    <div className="flex flex-wrap gap-2">
                       {item.kitchenStatus === "QUEUE" || item.kitchenStatus === "PENDING" ? (
-                        <button
+                        <Button
                           type="button"
-                          className="btn-primary btn-small"
+                          className="!px-3 !py-1.5 text-xs"
                           disabled={busyId === item.itemId}
                           onClick={() => void advance(item, "PREPARING")}
                         >
                           Preparar
-                        </button>
+                        </Button>
                       ) : null}
                       {item.kitchenStatus === "PREPARING" ? (
-                        <button
+                        <Button
                           type="button"
-                          className="btn-primary btn-small"
+                          className="!px-3 !py-1.5 text-xs"
                           disabled={busyId === item.itemId}
                           onClick={() => void advance(item, "READY")}
                         >
                           Pronto
-                        </button>
+                        </Button>
                       ) : null}
                       {item.kitchenStatus === "READY" ? (
-                        <span className="kitchen-done">Aguardando retirada / servir</span>
+                        <span className="text-xs text-emerald-400/90">Aguardando retirada / servir</span>
                       ) : null}
                     </div>
                   ) : null}

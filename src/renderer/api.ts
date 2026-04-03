@@ -49,9 +49,26 @@ export type UserListItem = User & {
 };
 
 async function parseJson<T>(res: Response): Promise<T> {
-  const data = (await res.json()) as T & { error?: string };
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    if (!res.ok) {
+      throw new Error(
+        res.status === 502 || res.status === 503
+          ? "Servidor indisponível. Reinicie o backend (porta 3001) ou rode: npx prisma db push"
+          : `Erro HTTP ${res.status} (resposta vazia).`,
+      );
+    }
+    throw new Error("Resposta vazia do servidor. Verifique se a API está rodando.");
+  }
+  let data: T & { error?: string };
+  try {
+    data = JSON.parse(text) as T & { error?: string };
+  } catch {
+    throw new Error("Resposta inválida do servidor (não é JSON). O backend pode ter encerrado com erro.");
+  }
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? `Erro HTTP ${res.status}`);
+    throw new Error(data.error ?? `Erro HTTP ${res.status}`);
   }
   return data as T;
 }
@@ -152,15 +169,37 @@ export async function apiDeleteUser(token: string, id: string): Promise<void> {
 
 export type CashOperator = { id: string; name: string; login: string };
 
+export type CashShift = "MANHA" | "TARDE" | "NOITE" | "CUSTOM";
+
 export type CashSession = {
   id: string;
   openedAt: string;
   initialValue: number;
   closedAt: string | null;
   closingBalance: number | null;
+  shift: CashShift;
+  shiftCustomLabel: string | null;
+  openingNotes: string | null;
+  denominations: Record<string, number> | null;
   openedBy: CashOperator;
   closedBy: CashOperator | null;
 };
+
+export type CashMovementRow = {
+  id: string;
+  type: "SANGRIA" | "SUPRIMENTO";
+  amount: number;
+  note: string | null;
+  createdAt: string;
+  createdBy: CashOperator;
+};
+
+/** Indica se há turno de caixa aberto (sem valores; serve para PDV/cozinha). */
+export async function apiCashOpenStatus(token: string): Promise<boolean> {
+  const res = await fetch("/api/cash-register/open-status", { headers: authHeaders(token) });
+  const data = await parseJson<{ open: boolean }>(res);
+  return data.open;
+}
 
 export async function apiCashCurrent(token: string): Promise<CashSession | null> {
   const res = await fetch("/api/cash-register/current", { headers: authHeaders(token) });
@@ -176,14 +215,52 @@ export async function apiCashHistory(token: string, limit = 50): Promise<CashSes
   return data.sessions;
 }
 
-export async function apiCashOpen(token: string, initialValue: number): Promise<CashSession> {
+export async function apiCashSessionDetail(
+  token: string,
+  id: string,
+): Promise<{ session: CashSession; movements: CashMovementRow[] }> {
+  const res = await fetch(`/api/cash-register/sessions/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  });
+  return parseJson<{ session: CashSession; movements: CashMovementRow[] }>(res);
+}
+
+export async function apiCashOpen(
+  token: string,
+  body: {
+    initialValue: number;
+    shift?: CashShift;
+    shiftCustomLabel?: string | null;
+    openingNotes?: string | null;
+    denominations?: Record<string, number> | null;
+  },
+): Promise<CashSession> {
   const res = await fetch("/api/cash-register/open", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ initialValue }),
+    body: JSON.stringify(body),
   });
   const data = await parseJson<{ session: CashSession }>(res);
   return data.session;
+}
+
+export async function apiCashMovements(token: string): Promise<CashMovementRow[]> {
+  const res = await fetch("/api/cash-register/movements", { headers: authHeaders(token) });
+  const data = await parseJson<{ movements: CashMovementRow[] }>(res);
+  return data.movements;
+}
+
+export async function apiCashAddMovement(
+  token: string,
+  body: { type: "SANGRIA" | "SUPRIMENTO"; amount: number; note?: string | null },
+): Promise<CashMovementRow> {
+  const res = await fetch("/api/cash-register/movements", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ movement: CashMovementRow }>(res);
+  return data.movement;
 }
 
 export async function apiCashClose(token: string, closingBalance?: number | null): Promise<CashSession> {
@@ -218,6 +295,19 @@ export type PdvOrderItem = {
   kitchenStatus: string | null;
 };
 
+export type PaymentMethodKind = "DINHEIRO" | "DEBITO" | "CREDITO" | "VALE";
+
+export type OrderPaymentRow = {
+  id: string;
+  paymentMethodId: string;
+  paymentMethodName: string;
+  paymentMethodKind: PaymentMethodKind;
+  amountPaid: number;
+  feeAmount: number;
+  netAmount: number;
+  cashReceived: number | null;
+};
+
 export type PdvOrder = {
   id: string;
   kind: "DIRECT" | "COMANDA";
@@ -227,10 +317,70 @@ export type PdvOrder = {
   status: "OPEN" | "CLOSED" | "CANCELLED";
   openedAt: string;
   closedAt: string | null;
+  lastActivityAt?: string;
+  cancelledAt?: string | null;
+  closedCashRegisterId?: string | null;
   createdBy: { id: string; name: string; login: string };
   items: PdvOrderItem[];
   subtotal: number;
+  payments?: OrderPaymentRow[];
+  canReopen?: boolean;
 };
+
+export type PaymentMethodRow = {
+  id: string;
+  name: string;
+  kind: PaymentMethodKind;
+  feePercent: number | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function apiListPaymentMethods(token: string, all = false): Promise<PaymentMethodRow[]> {
+  const res = await fetch(`/api/payment-methods${all ? "?all=1" : ""}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ methods: PaymentMethodRow[] }>(res);
+  return data.methods;
+}
+
+export async function apiCreatePaymentMethod(
+  token: string,
+  body: { name: string; kind: PaymentMethodKind; feePercent?: number | null },
+): Promise<PaymentMethodRow> {
+  const res = await fetch("/api/payment-methods", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ method: PaymentMethodRow }>(res);
+  return data.method;
+}
+
+export async function apiUpdatePaymentMethod(
+  token: string,
+  id: string,
+  body: Partial<{ name: string; kind: PaymentMethodKind; feePercent: number | null; active: boolean }>,
+): Promise<PaymentMethodRow> {
+  const res = await fetch(`/api/payment-methods/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ method: PaymentMethodRow }>(res);
+  return data.method;
+}
+
+export async function apiDeletePaymentMethod(token: string, id: string): Promise<void> {
+  const res = await fetch(`/api/payment-methods/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (res.status === 204) {
+    return;
+  }
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  throw new Error(data.error ?? `Erro HTTP ${res.status}`);
+}
 
 export async function apiPdvProducts(token: string): Promise<PdvProduct[]> {
   const res = await fetch("/api/pdv/products", { headers: authHeaders(token) });
@@ -238,9 +388,29 @@ export async function apiPdvProducts(token: string): Promise<PdvProduct[]> {
   return data.products;
 }
 
+export type PdvTodayStats = {
+  closedTodayCount: number;
+  closedTodayTotal: number;
+  openComandasCount: number;
+};
+
+export async function apiPdvStatsToday(token: string): Promise<PdvTodayStats> {
+  const res = await fetch("/api/pdv/stats/today", { headers: authHeaders(token) });
+  return parseJson(res);
+}
+
 export async function apiPdvOrders(
   token: string,
-  q?: { status?: PdvOrder["status"]; kind?: PdvOrder["kind"]; customerId?: string },
+  q?: {
+    status?: PdvOrder["status"];
+    kind?: PdvOrder["kind"];
+    customerId?: string;
+    search?: string;
+    sort?: "stale" | "recentClosed";
+    limit?: number;
+    /** ISO — filtra pedidos com closedAt >= data (útil para vendas de hoje). */
+    closedFrom?: string;
+  },
 ): Promise<PdvOrder[]> {
   const params = new URLSearchParams();
   if (q?.status) {
@@ -251,6 +421,18 @@ export async function apiPdvOrders(
   }
   if (q?.customerId) {
     params.set("customerId", q.customerId);
+  }
+  if (q?.search) {
+    params.set("search", q.search);
+  }
+  if (q?.sort) {
+    params.set("sort", q.sort);
+  }
+  if (q?.limit != null) {
+    params.set("limit", String(q.limit));
+  }
+  if (q?.closedFrom) {
+    params.set("closedFrom", q.closedFrom);
   }
   const qs = params.toString();
   const res = await fetch(`/api/pdv/orders${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
@@ -340,10 +522,34 @@ export async function apiPdvRemoveItem(
   return data.order;
 }
 
-export async function apiPdvCloseOrder(token: string, orderId: string): Promise<PdvOrder> {
+export async function apiPdvCloseOrder(
+  token: string,
+  orderId: string,
+  payments: { paymentMethodId: string; amountPaid: number; cashReceived?: number | null }[],
+): Promise<PdvOrder> {
   const res = await fetch(`/api/pdv/orders/${orderId}/close`, {
     method: "POST",
     headers: authHeaders(token),
+    body: JSON.stringify({ payments }),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvReopenOrder(token: string, orderId: string): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/reopen`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  const data = await parseJson<{ order: PdvOrder }>(res);
+  return data.order;
+}
+
+export async function apiPdvCancelOrder(token: string, orderId: string, restoreStock: boolean): Promise<PdvOrder> {
+  const res = await fetch(`/api/pdv/orders/${orderId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ restoreStock }),
   });
   const data = await parseJson<{ order: PdvOrder }>(res);
   return data.order;

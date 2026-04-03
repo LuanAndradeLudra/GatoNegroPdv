@@ -1,108 +1,155 @@
-import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useState } from "react";
+import { apiCashOpenStatus } from "./api";
 import { CashRegisterScreen } from "./CashRegisterScreen";
 import { CustomersScreen } from "./CustomersScreen";
+import { DashboardHome } from "./DashboardHome";
 import { KitchenScreen } from "./KitchenScreen";
 import { useAuth } from "./AuthContext";
-import { PdvScreen } from "./PdvScreen";
+import { ModuleLockOverlay } from "./components/ModuleLockOverlay";
+import { PdvScreen, type PdvBootPayload } from "./PdvScreen";
+import { PaymentMethodsScreen } from "./PaymentMethodsScreen";
 import { UsersScreen } from "./UsersScreen";
+import { AppShell, type ShellView } from "./components/AppShell";
+import { Card, CardContent } from "./ui/Card";
+
+function ErpPlaceholder() {
+  return (
+    <div className="mx-auto max-w-lg px-6 py-12">
+      <Card>
+        <CardContent className="!py-10 text-center">
+          <p className="text-lg font-medium text-zinc-200">Módulo ERP</p>
+          <p className="mt-2 text-sm text-zinc-500">Integração de estoque e cadastros em desenvolvimento.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export function HubScreen() {
   const { state, logout } = useAuth();
-  const [view, setView] = useState<"hub" | "users" | "caixa" | "pdv" | "cozinha" | "clientes">("hub");
+  const [view, setView] = useState<ShellView>("home");
+  const [cashOpen, setCashOpen] = useState<boolean | null>(null);
+  const [pdvBoot, setPdvBoot] = useState<PdvBootPayload | null>(null);
 
-  if (state.status !== "authenticated") {
+  const user = state.status === "authenticated" ? state.user : null;
+  const token = state.status === "authenticated" ? state.token : null;
+  const access = user?.access;
+
+  const refreshCash = useCallback(async () => {
+    if (!token || (!access?.pdv && !access?.kitchen)) {
+      setCashOpen(null);
+      return;
+    }
+    try {
+      const open = await apiCashOpenStatus(token);
+      setCashOpen(open);
+    } catch {
+      setCashOpen(false);
+    }
+  }, [token, access?.pdv, access?.kitchen]);
+
+  useEffect(() => {
+    void refreshCash();
+  }, [refreshCash]);
+
+  const clearPdvBoot = useCallback(() => setPdvBoot(null), []);
+
+  function handleNavigate(v: ShellView) {
+    if (v === "pdv") {
+      setPdvBoot(null);
+    }
+    setView(v);
+  }
+
+  useEffect(() => {
+    if (!user || !access) {
+      return;
+    }
+    const allowed = (v: ShellView): boolean => {
+      switch (v) {
+        case "home":
+        case "settings":
+          return true;
+        case "caixa":
+        case "pdv":
+          return access.pdv;
+        case "erp":
+          return access.erp;
+        case "users":
+          return access.manageUsers;
+        case "cozinha":
+          return access.kitchen;
+        case "clientes":
+          return access.clients;
+        default:
+          return false;
+      }
+    };
+    if (!allowed(view)) {
+      setView("home");
+    }
+  }, [user, access, view]);
+
+  if (state.status !== "authenticated" || !user || !token || !access) {
     return null;
   }
 
-  const { user } = state;
-  const { access } = user;
-
-  if (view === "users" && access.manageUsers) {
-    return <UsersScreen onBack={() => setView("hub")} />;
-  }
-
-  if (view === "caixa" && access.pdv) {
-    return <CashRegisterScreen onBack={() => setView("hub")} />;
-  }
-
-  if (view === "pdv" && access.pdv) {
-    return <PdvScreen onBack={() => setView("hub")} />;
-  }
-
-  if (view === "cozinha" && access.kitchen) {
-    return <KitchenScreen onBack={() => setView("hub")} />;
-  }
-
-  if (view === "clientes" && access.clients) {
-    return <CustomersScreen onBack={() => setView("hub")} />;
-  }
+  const needsCashGate = access.pdv || access.kitchen;
+  const cashGateOpen = needsCashGate ? cashOpen : null;
 
   return (
-    <div className="hub-layout">
-      <header className="hub-header">
-        <div>
-          <h1 className="hub-title">Olá, {user.name}</h1>
-          <p className="hub-meta">
-            {user.login} · {user.role}
-          </p>
-          <p className="hub-access-line">
-            {access.pdv ? <span className="tag tag-on">PDV</span> : <span className="tag tag-off">PDV</span>}
-            {access.erp ? <span className="tag tag-on">ERP</span> : <span className="tag tag-off">ERP</span>}
-            {access.manageUsers ? (
-              <span className="tag tag-on">Gestão de usuários</span>
-            ) : (
-              <span className="tag tag-off">Gestão de usuários</span>
-            )}
-            {access.kitchen ? <span className="tag tag-on">Cozinha</span> : <span className="tag tag-off">Cozinha</span>}
-            {access.clients ? <span className="tag tag-on">Clientes</span> : <span className="tag tag-off">Clientes</span>}
-          </p>
-        </div>
-        <button type="button" className="btn-ghost" onClick={logout}>
-          Sair
-        </button>
-      </header>
-      <main className="hub-main">
-        <p className="hub-hint">Escolha o módulo (conforme seu nível de acesso)</p>
-        <div className="hub-actions">
-          {access.pdv ? (
-            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("caixa")}>
-              Caixa
-            </button>
+    <AppShell
+      view={view}
+      onNavigate={handleNavigate}
+      access={access}
+      cashOpen={cashGateOpen}
+      cashClosedBanner={
+        needsCashGate && cashOpen === false
+          ? { onOpenCash: () => setView("caixa") }
+          : undefined
+      }
+      onLogout={logout}
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={view}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="min-h-full"
+        >
+          {view === "home" ? (
+            <DashboardHome
+              user={user}
+              token={token}
+              access={access}
+              cashOpen={cashGateOpen}
+              onNavigate={handleNavigate}
+              onPdvShortcut={(mode) => {
+                setPdvBoot({ mode, id: Date.now() });
+                setView("pdv");
+              }}
+            />
           ) : null}
-          <button
-            type="button"
-            className="hub-tile"
-            disabled={!access.pdv}
-            title={!access.pdv ? "Sem permissão para o PDV" : undefined}
-            onClick={() => access.pdv && setView("pdv")}
-          >
-            Entrar no PDV
-          </button>
-          <button
-            type="button"
-            className="hub-tile"
-            disabled={!access.erp}
-            title={!access.erp ? "Sem permissão para o ERP" : undefined}
-          >
-            Entrar no ERP
-          </button>
-          {access.manageUsers ? (
-            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("users")}>
-              Usuários
-            </button>
+          {view === "caixa" ? <CashRegisterScreen onSessionChange={() => void refreshCash()} /> : null}
+          {view === "pdv" ? (
+            <ModuleLockOverlay active={cashOpen === false && !!access.pdv} onGoToCash={() => setView("caixa")}>
+              <PdvScreen boot={pdvBoot} onBootConsumed={clearPdvBoot} />
+            </ModuleLockOverlay>
           ) : null}
-          {access.kitchen ? (
-            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("cozinha")}>
-              Cozinha
-            </button>
+          {view === "erp" ? <ErpPlaceholder /> : null}
+          {view === "users" ? <UsersScreen /> : null}
+          {view === "cozinha" ? (
+            <ModuleLockOverlay active={cashOpen === false && !!access.kitchen} onGoToCash={() => setView("caixa")}>
+              <KitchenScreen />
+            </ModuleLockOverlay>
           ) : null}
-          {access.clients ? (
-            <button type="button" className="hub-tile hub-tile-accent" onClick={() => setView("clientes")}>
-              Clientes
-            </button>
-          ) : null}
-        </div>
-      </main>
-    </div>
+          {view === "clientes" ? <CustomersScreen /> : null}
+          {view === "settings" ? <PaymentMethodsScreen /> : null}
+        </motion.div>
+      </AnimatePresence>
+    </AppShell>
   );
 }

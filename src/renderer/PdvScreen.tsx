@@ -1,20 +1,30 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ShoppingBag } from "lucide-react";
 import {
   apiListCustomers,
+  apiListPaymentMethods,
   apiPdvAddItem,
+  apiPdvCancelOrder,
   apiPdvCloseOrder,
   apiPdvCreateOrder,
   apiPdvOrder,
   apiPdvOrders,
   apiPdvPatchOrder,
   apiPdvProducts,
+  apiPdvReopenOrder,
   apiPdvRemoveItem,
   apiPdvUpdateItemQty,
   type CustomerRow,
   type PdvOrder,
   type PdvProduct,
+  type PaymentMethodRow,
 } from "./api";
 import { useAuth } from "./AuthContext";
+import { CheckoutModal, type CheckoutPaymentLine } from "./components/CheckoutModal";
+import { ClosedOrderReportModal } from "./components/ClosedOrderReportModal";
+import { cn } from "./lib/cn";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -32,18 +42,33 @@ function kitchenStatusLabel(status: string | null): string | null {
 }
 
 type Step = "menu" | "selling";
+type SaleMode = "direct" | "comanda";
 
-export function PdvScreen({ onBack }: { onBack: () => void }) {
+export type PdvBootPayload = { mode: "direct" | "comanda"; id: number };
+
+export function PdvScreen({
+  boot,
+  onBootConsumed,
+}: {
+  boot?: PdvBootPayload | null;
+  onBootConsumed?: () => void;
+}) {
   const { state } = useAuth();
   const token = state.status === "authenticated" ? state.token : null;
   const accessClients = state.status === "authenticated" && state.user.access.clients;
 
   const [step, setStep] = useState<Step>("menu");
+  const [saleMode, setSaleMode] = useState<SaleMode>("direct");
   const [order, setOrder] = useState<PdvOrder | null>(null);
   const [products, setProducts] = useState<PdvProduct[]>([]);
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [openComandas, setOpenComandas] = useState<PdvOrder[]>([]);
+  const [comandaSearch, setComandaSearch] = useState("");
+  const [recentClosed, setRecentClosed] = useState<PdvOrder[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodRow[]>([]);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [reportOrderId, setReportOrderId] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [comandaName, setComandaName] = useState("");
   const [mesaEdit, setMesaEdit] = useState("");
@@ -62,8 +87,41 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     if (!token) {
       return;
     }
-    const list = await apiPdvOrders(token, { status: "OPEN", kind: "COMANDA" });
+    const search = comandaSearch.trim() || undefined;
+    const list = await apiPdvOrders(token, {
+      status: "OPEN",
+      kind: "COMANDA",
+      sort: "stale",
+      search,
+    });
     setOpenComandas(list);
+  }, [token, comandaSearch]);
+
+  const loadRecentClosed = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const list = await apiPdvOrders(token, {
+      status: "CLOSED",
+      sort: "recentClosed",
+      limit: 14,
+      closedFrom: start.toISOString(),
+    });
+    setRecentClosed(list);
+  }, [token]);
+
+  const loadPaymentMethods = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+    try {
+      const list = await apiListPaymentMethods(token, false);
+      setPaymentMethods(list);
+    } catch {
+      setPaymentMethods([]);
+    }
   }, [token]);
 
   useEffect(() => {
@@ -71,8 +129,22 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
       return;
     }
     void loadProducts().catch(() => setError("Não foi possível carregar produtos."));
+    void loadPaymentMethods();
+  }, [token, loadProducts, loadPaymentMethods]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
     void loadOpenComandas();
-  }, [token, loadProducts, loadOpenComandas]);
+  }, [token, loadOpenComandas]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+    void loadRecentClosed();
+  }, [token, loadRecentClosed]);
 
   useEffect(() => {
     if (!token || !accessClients) {
@@ -89,6 +161,14 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     }
   }, [order?.id, order?.kind, order?.clientName]);
 
+  useEffect(() => {
+    if (!boot) {
+      return;
+    }
+    setSaleMode(boot.mode);
+    onBootConsumed?.();
+  }, [boot, onBootConsumed]);
+
   const filteredProducts = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) {
@@ -96,6 +176,11 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     }
     return products.filter((p) => p.name.toLowerCase().includes(q));
   }, [products, filter]);
+
+  const openComandasTotal = useMemo(
+    () => Math.round(openComandas.reduce((s, o) => s + o.subtotal, 0) * 100) / 100,
+    [openComandas],
+  );
 
   async function startDirect() {
     if (!token) {
@@ -133,6 +218,7 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
       setOrder(o);
       setStep("selling");
       await loadOpenComandas();
+      await loadRecentClosed();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar comanda");
     } finally {
@@ -205,19 +291,80 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function finalize() {
+  function openCheckout() {
+    if (!order) {
+      return;
+    }
+    setError(null);
+    setCheckoutOpen(true);
+  }
+
+  async function confirmCheckout(payments: CheckoutPaymentLine[]) {
     if (!token || !order) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await apiPdvCloseOrder(token, order.id);
+      await apiPdvCloseOrder(
+        token,
+        order.id,
+        payments.map((p) => ({
+          paymentMethodId: p.paymentMethodId,
+          amountPaid: p.amountPaid,
+          cashReceived: p.cashReceived,
+        })),
+      );
+      setCheckoutOpen(false);
       setOrder(null);
       setStep("menu");
       await loadOpenComandas();
+      await loadRecentClosed();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao finalizar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reopenSale(o: PdvOrder) {
+    if (!token) {
+      return;
+    }
+    if (!window.confirm("Reabrir esta venda? Os lançamentos de pagamento serão excluídos e o pedido voltará a aberto.")) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPdvReopenOrder(token, o.id);
+      await loadRecentClosed();
+      await loadOpenComandas();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao reabrir");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelSale(o: PdvOrder) {
+    if (!token) {
+      return;
+    }
+    if (!window.confirm("Estornar esta venda? Ela será marcada como cancelada.")) {
+      return;
+    }
+    const restoreStock =
+      o.status === "CLOSED"
+        ? window.confirm("Deseja retornar os itens ao estoque?\n\nOK = Sim\nCancelar = Não")
+        : false;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPdvCancelOrder(token, o.id, restoreStock);
+      await loadRecentClosed();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao estornar");
     } finally {
       setBusy(false);
     }
@@ -233,209 +380,266 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
     return null;
   }
 
-  if (step === "selling" && order) {
-    return (
-      <div className="pdv-layout">
-        <header className="pdv-toolbar">
-          <button type="button" className="btn-ghost" onClick={leaveSelling} disabled={busy}>
-            ← Menu PDV
-          </button>
-          <div className="pdv-toolbar-title">
-            <h1 className="users-title">
-              {order.kind === "DIRECT" ? "Venda direta" : "Comanda"}
-              {order.kind === "COMANDA" && order.customer
-                ? ` — ${order.customer.name}`
-                : order.clientName
-                  ? ` — ${order.clientName}`
-                  : null}
-            </h1>
-            <p className="pdv-sub">Pedido #{order.id.slice(0, 8)} · {order.status}</p>
-          </div>
-          <button type="button" className="btn-ghost" onClick={onBack}>
-            Hub
-          </button>
-        </header>
-        {error ? <p className="users-error pdv-banner">{error}</p> : null}
-        {order.kind === "COMANDA" && accessClients ? (
-          <div className="pdv-customer-bar">
-            <label className="pdv-customer-field">
-              <span>Cliente cadastrado</span>
-              <select
-                value={order.customerId ?? ""}
-                disabled={busy}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  void (async () => {
-                    if (!token) {
-                      return;
-                    }
-                    setBusy(true);
-                    try {
-                      const next = await apiPdvPatchOrder(token, order.id, {
-                        customerId: v || null,
-                      });
-                      setOrder(next);
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "Erro ao vincular cliente");
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              >
-                <option value="">— Sem vínculo (só mesa/nome) —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="pdv-customer-field">
-              <span>Mesa / observação</span>
-              <input
-                value={mesaEdit}
-                onChange={(e) => setMesaEdit(e.target.value)}
-                disabled={busy}
-                onBlur={() => {
-                  void (async () => {
-                    if (!token) {
-                      return;
-                    }
-                    const v = mesaEdit.trim() || null;
-                    const prev = order.clientName ?? null;
-                    if (v === prev) {
-                      return;
-                    }
-                    setBusy(true);
-                    try {
-                      const next = await apiPdvPatchOrder(token, order.id, { clientName: v });
-                      setOrder(next);
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "Erro ao salvar");
-                    } finally {
-                      setBusy(false);
-                    }
-                  })();
-                }}
-              />
-            </label>
-          </div>
+  const cartPanel = (
+    <aside className="flex w-full flex-col border-t border-white/[0.08] bg-[#161616]/95 backdrop-blur-md lg:w-[min(420px,40vw)] lg:border-l lg:border-t-0">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+        <h2 className="text-sm font-semibold text-zinc-200">Resumo</h2>
+        {order && step === "selling" ? (
+          <span className="text-[11px] text-zinc-500">#{order.id.slice(0, 8)}</span>
         ) : null}
-        <div className="pdv-split">
-          <section className="pdv-panel">
+      </div>
+      <div className="flex min-h-[200px] flex-1 flex-col overflow-auto px-4 py-3">
+        {!order || step !== "selling" ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center">
+            <div className="rounded-full bg-white/[0.06] p-4 ring-1 ring-white/[0.08]">
+              <ShoppingBag className="h-8 w-8 text-zinc-500" strokeWidth={1.25} />
+            </div>
+            <p className="max-w-[240px] text-sm text-zinc-500">
+              Inicie uma venda direta ou uma comanda para montar o pedido aqui.
+            </p>
+            <p className="text-2xl font-semibold tabular-nums text-zinc-600">{money.format(0)}</p>
+          </div>
+        ) : order.items.length === 0 ? (
+          <p className="text-sm text-zinc-500">Nenhum item. Toque em um produto à esquerda.</p>
+        ) : (
+          <ul className="space-y-0 divide-y divide-white/[0.06]">
+            {order.items.map((i) => (
+              <li key={i.id} className="flex justify-between gap-2 py-3 first:pt-0">
+                <div className="min-w-0 flex-1">
+                  <strong className="text-sm text-zinc-100">{i.productName}</strong>
+                  {i.isKitchenItem && i.kitchenStatus ? (
+                    <span className="mt-1 block text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">
+                      {kitchenStatusLabel(i.kitchenStatus)}
+                    </span>
+                  ) : null}
+                  <div className="mt-1 text-xs text-zinc-500">
+                    {money.format(i.unitPrice)} ×{" "}
+                    <span className="inline-flex items-center gap-1 align-middle">
+                      <button
+                        type="button"
+                        className="rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800"
+                        disabled={busy || i.quantity <= 1}
+                        onClick={() => {
+                          if (i.quantity <= 1) {
+                            void removeItem(i.id);
+                          } else {
+                            void changeQty(i.id, i.quantity - 1);
+                          }
+                        }}
+                      >
+                        −
+                      </button>
+                      <span className="min-w-[1.5rem] text-center">{i.quantity}</span>
+                      <button
+                        type="button"
+                        className="rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800"
+                        disabled={busy}
+                        onClick={() => void changeQty(i.id, i.quantity + 1)}
+                      >
+                        +
+                      </button>
+                    </span>{" "}
+                    = {money.format(i.lineTotal)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 text-zinc-500 hover:text-red-400"
+                  onClick={() => void removeItem(i.id)}
+                  disabled={busy}
+                  aria-label="Remover"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="border-t border-white/[0.08] bg-[#141414]/80 px-4 py-4">
+        {order && step === "selling" ? (
+          <>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm text-zinc-500">Total</span>
+              <span className="text-2xl font-bold tabular-nums text-amber-200/95">{money.format(order.subtotal)}</span>
+            </div>
+            <Button type="button" className="mt-4 w-full" disabled={busy} onClick={openCheckout}>
+              {order.kind === "DIRECT" ? "Finalizar venda" : "Encerrar comanda"}
+            </Button>
+          </>
+        ) : (
+          <div className="flex items-baseline justify-between gap-2 opacity-50">
+            <span className="text-sm text-zinc-500">Total</span>
+            <span className="text-xl font-semibold tabular-nums text-zinc-600">{money.format(0)}</span>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+
+  return (
+    <>
+      {step === "selling" && order ? (
+      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] px-4 py-2">
+            <Button type="button" variant="ghost" className="!px-2 text-sm" onClick={leaveSelling} disabled={busy}>
+              ← Voltar ao menu
+            </Button>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-sm font-semibold text-zinc-100">
+                {order.kind === "DIRECT" ? "Venda direta" : "Comanda"}
+                {order.kind === "COMANDA" && order.customer
+                  ? ` — ${order.customer.name}`
+                  : order.clientName
+                    ? ` — ${order.clientName}`
+                    : null}
+              </h2>
+              <p className="text-[11px] text-zinc-500">
+                Pedido #{order.id.slice(0, 8)} · {order.status}
+              </p>
+            </div>
+          </div>
+          {error ? <p className="border-b border-red-500/20 bg-red-950/30 px-4 py-2 text-sm text-red-300">{error}</p> : null}
+          {order.kind === "COMANDA" && accessClients ? (
+            <div className="flex flex-wrap gap-3 border-b border-white/[0.06] bg-[#161616]/50 px-4 py-3">
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-zinc-500">
+                Cliente cadastrado
+                <select
+                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  value={order.customerId ?? ""}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    void (async () => {
+                      if (!token) {
+                        return;
+                      }
+                      setBusy(true);
+                      try {
+                        const next = await apiPdvPatchOrder(token, order.id, {
+                          customerId: v || null,
+                        });
+                        setOrder(next);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Erro ao vincular cliente");
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                >
+                  <option value="">— Sem vínculo (só mesa/nome) —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-zinc-500">
+                Mesa / observação
+                <input
+                  className="rounded-lg border border-white/10 bg-[#141414] px-2 py-2 text-sm text-zinc-100"
+                  value={mesaEdit}
+                  onChange={(e) => setMesaEdit(e.target.value)}
+                  disabled={busy}
+                  onBlur={() => {
+                    void (async () => {
+                      if (!token) {
+                        return;
+                      }
+                      const v = mesaEdit.trim() || null;
+                      const prev = order.clientName ?? null;
+                      if (v === prev) {
+                        return;
+                      }
+                      setBusy(true);
+                      try {
+                        const next = await apiPdvPatchOrder(token, order.id, { clientName: v });
+                        setOrder(next);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Erro ao salvar");
+                      } finally {
+                        setBusy(false);
+                      }
+                    })();
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4">
             <input
               type="search"
-              className="pdv-search"
+              className="mb-3 w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30"
               placeholder="Buscar produto…"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
-            <div className="pdv-product-grid">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
               {filteredProducts.map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  className="pdv-product-card"
+                  className="flex flex-col items-start gap-1 rounded-lg border border-white/[0.08] bg-[#1e1e1e]/80 p-3 text-left text-sm transition-colors hover:border-amber-500/30 hover:bg-[#222]"
                   onClick={() => void addProduct(p)}
                   disabled={busy}
                 >
-                  <span className="pdv-product-name">{p.name}</span>
-                  <span className="pdv-product-meta">
+                  <span className="font-medium text-zinc-100">{p.name}</span>
+                  <span className="text-[11px] text-zinc-500">
                     {money.format(p.price)} · {p.productType === "GELADO" ? "Gelado" : "Quente"}
                     {p.isKitchenItem ? " · Cozinha" : ""}
                   </span>
                 </button>
               ))}
             </div>
-          </section>
-          <aside className="pdv-cart">
-            <h2 className="pdv-cart-title">Itens</h2>
-            {order.items.length === 0 ? (
-              <p className="cash-muted">Nenhum item. Toque em um produto à esquerda.</p>
-            ) : (
-              <ul className="pdv-cart-list">
-                {order.items.map((i) => (
-                  <li key={i.id} className="pdv-cart-line">
-                    <div>
-                      <strong>{i.productName}</strong>
-                      {i.isKitchenItem && i.kitchenStatus ? (
-                        <span className="pdv-kitchen-badge">{kitchenStatusLabel(i.kitchenStatus)}</span>
-                      ) : null}
-                      <div className="pdv-cart-line-price">
-                        {money.format(i.unitPrice)} ×{" "}
-                        <span className="pdv-qty-controls">
-                          <button
-                            type="button"
-                            className="pdv-qty-btn"
-                            disabled={busy || i.quantity <= 1}
-                            onClick={() => {
-                              if (i.quantity <= 1) {
-                                void removeItem(i.id);
-                              } else {
-                                void changeQty(i.id, i.quantity - 1);
-                              }
-                            }}
-                          >
-                            −
-                          </button>
-                          <span className="pdv-qty-val">{i.quantity}</span>
-                          <button
-                            type="button"
-                            className="pdv-qty-btn"
-                            disabled={busy}
-                            onClick={() => void changeQty(i.id, i.quantity + 1)}
-                          >
-                            +
-                          </button>
-                        </span>{" "}
-                        = {money.format(i.lineTotal)}
-                      </div>
-                    </div>
-                    <button type="button" className="btn-link danger" onClick={() => void removeItem(i.id)} disabled={busy}>
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="pdv-total">
-              <span>Subtotal</span>
-              <strong>{money.format(order.subtotal)}</strong>
-            </div>
-            <button type="button" className="btn-primary pdv-finalize" onClick={() => void finalize()} disabled={busy}>
-              {order.kind === "DIRECT" ? "Finalizar venda" : "Encerrar comanda"}
-            </button>
-          </aside>
+          </div>
         </div>
+        {cartPanel}
       </div>
-    );
-  }
+      ) : (
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-white/[0.08] lg:border-b-0 lg:border-r">
+        {error ? <p className="border-b border-red-500/20 bg-red-950/30 px-4 py-2 text-sm text-red-300">{error}</p> : null}
+        <div className="space-y-4 border-b border-white/[0.06] p-4">
+          <div className="flex rounded-lg bg-zinc-900/60 p-1 ring-1 ring-white/[0.08]">
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
+                saleMode === "direct" ? "bg-[#2a2a2a] text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300",
+              )}
+              onClick={() => setSaleMode("direct")}
+            >
+              Venda direta
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex-1 rounded-md py-2 text-sm font-medium transition-colors",
+                saleMode === "comanda" ? "bg-[#2a2a2a] text-zinc-100 shadow-sm" : "text-zinc-500 hover:text-zinc-300",
+              )}
+              onClick={() => setSaleMode("comanda")}
+            >
+              Comanda
+            </button>
+          </div>
 
-  return (
-    <div className="pdv-layout">
-      <header className="pdv-toolbar">
-        <button type="button" className="btn-ghost" onClick={onBack}>
-          ← Voltar
-        </button>
-        <h1 className="users-title pdv-main-title">PDV — Nova venda</h1>
-        <span />
-      </header>
-      <div className="pdv-menu">
-        {error ? <p className="users-error">{error}</p> : null}
-        <div className="pdv-menu-grid">
-          <button type="button" className="pdv-mode-card" onClick={() => void startDirect()} disabled={busy}>
-            <h2>Venda direta</h2>
-            <p>Balcão, sem cliente obrigatório. Inicia um pedido e finalize ao concluir.</p>
-          </button>
-          <div className="pdv-mode-card pdv-comanda-card">
-            <h2>Comanda</h2>
-            <p>Cliente cadastrado (relatório) ou só mesa/nome rápido.</p>
-            <form onSubmit={(e) => void startComanda(e)} className="pdv-comanda-form">
+          {saleMode === "direct" ? (
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-500">Balcão, sem cliente obrigatório. Ideal para vendas rápidas.</p>
+              <Button type="button" className="w-full sm:w-auto" disabled={busy} onClick={() => void startDirect()}>
+                Iniciar venda no balcão
+              </Button>
+            </div>
+          ) : (
+            <form className="space-y-3" onSubmit={(e) => void startComanda(e)}>
               {accessClients ? (
-                <label className="field">
-                  <span>Cliente (faturamento)</span>
+                <label className="flex flex-col gap-1 text-xs text-zinc-500">
+                  Cliente (faturamento)
                   <select
+                    className="rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-zinc-100"
                     value={selectedCustomerId}
                     onChange={(e) => setSelectedCustomerId(e.target.value)}
                     disabled={busy}
@@ -449,36 +653,133 @@ export function PdvScreen({ onBack }: { onBack: () => void }) {
                   </select>
                 </label>
               ) : null}
-              <input
-                type="text"
-                placeholder="Mesa / apelido (opcional)"
+              <Input
+                label="Mesa / apelido (opcional)"
+                placeholder="Ex.: Mesa 4"
                 value={comandaName}
                 onChange={(e) => setComandaName(e.target.value)}
                 disabled={busy}
               />
-              <button type="submit" className="btn-primary" disabled={busy}>
-                Abrir comanda
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={busy}>
+                  Abrir comanda
+                </Button>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => void startDirect()}>
+                  Prefiro venda direta
+                </Button>
+              </div>
             </form>
+          )}
+        </div>
+
+        <div className="flex flex-1 flex-col gap-4 p-4">
+          <div className="rounded-xl border border-white/[0.06] bg-[#181818]/80 px-4 py-3">
+            <p className="text-sm text-zinc-300">
+              <span className="font-semibold text-amber-200/90">{openComandas.length}</span> comandas abertas
+              <span className="mx-2 text-zinc-600">|</span>
+              Total em aberto:{" "}
+              <span className="font-semibold tabular-nums text-zinc-100">{money.format(openComandasTotal)}</span>
+            </p>
+          </div>
+          <Input
+            label="Buscar mesa ou cliente"
+            placeholder="Filtrar lista…"
+            value={comandaSearch}
+            onChange={(e) => setComandaSearch(e.target.value)}
+            disabled={busy}
+          />
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Comandas abertas</h3>
+            {openComandas.length === 0 ? (
+              <p className="text-sm text-zinc-600">Nenhuma comanda aberta.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {openComandas.map((o) => (
+                  <li key={o.id}>
+                    <button
+                      type="button"
+                      className="rounded-full border border-white/10 bg-[#1a1a1a] px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-amber-500/40"
+                      onClick={() => void resumeComanda(o)}
+                      disabled={busy}
+                    >
+                      {o.customer?.name ?? o.clientName ?? "Sem nome"} · {money.format(o.subtotal)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Encerradas hoje</h3>
+            {recentClosed.length === 0 ? (
+              <p className="text-sm text-zinc-600">Nenhuma venda fechada hoje.</p>
+            ) : (
+              <ul className="space-y-2">
+                {recentClosed.map((o) => (
+                  <li
+                    key={o.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-[#1a1a1a]/60 px-3 py-2 text-xs"
+                  >
+                    <span className="text-zinc-400">
+                      {o.kind === "DIRECT" ? "Balcão" : "Comanda"}{" "}
+                      {o.customer?.name ?? o.clientName ?? "—"} · {money.format(o.subtotal)}
+                    </span>
+                    <span className="flex flex-wrap gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="!py-0.5 !text-[11px]"
+                        disabled={busy}
+                        onClick={() => setReportOrderId(o.id)}
+                      >
+                        Relatório
+                      </Button>
+                      {o.canReopen ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="!py-0.5 !text-[11px]"
+                          disabled={busy}
+                          onClick={() => void reopenSale(o)}
+                        >
+                          Reabrir
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="danger"
+                        className="!py-0.5 !text-[11px]"
+                        disabled={busy}
+                        onClick={() => void cancelSale(o)}
+                      >
+                        Estornar
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
-        <section className="pdv-open-comandas">
-          <h3>Comandas abertas</h3>
-          {openComandas.length === 0 ? (
-            <p className="cash-muted">Nenhuma comanda aberta.</p>
-          ) : (
-            <ul className="pdv-comanda-chips">
-              {openComandas.map((o) => (
-                <li key={o.id}>
-                  <button type="button" className="pdv-chip" onClick={() => void resumeComanda(o)} disabled={busy}>
-                    {o.customer?.name ?? o.clientName ?? "Sem nome"} · {money.format(o.subtotal)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
+      {cartPanel}
     </div>
+      )}
+      <CheckoutModal
+        open={checkoutOpen}
+        subtotal={order?.subtotal ?? 0}
+        methods={paymentMethods}
+        busy={busy}
+        onClose={() => setCheckoutOpen(false)}
+        onConfirm={(p) => void confirmCheckout(p)}
+      />
+      <ClosedOrderReportModal
+        open={reportOrderId !== null}
+        orderId={reportOrderId}
+        token={token}
+        onClose={() => setReportOrderId(null)}
+      />
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { cashRegisterRouter } from "./routes/cashRegister.js";
 import { pdvRouter } from "./routes/pdv.js";
 import { kitchenRouter } from "./routes/kitchen.js";
 import { customersRouter } from "./routes/customers.js";
+import { paymentMethodsRouter } from "./routes/paymentMethods.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp(): express.Application {
   app.use("/api/pdv", pdvRouter);
   app.use("/api/kitchen", kitchenRouter);
   app.use("/api/customers", customersRouter);
+  app.use("/api/payment-methods", paymentMethodsRouter);
 
   if (process.env.NODE_ENV === "production") {
     const staticDir = path.join(process.cwd(), "dist");

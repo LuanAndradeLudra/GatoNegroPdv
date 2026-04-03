@@ -1,4 +1,4 @@
-import { PrismaClient, ProductType, UserRole } from "@prisma/client";
+import { PaymentMethodKind, PrismaClient, ProductType, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -36,6 +36,20 @@ async function main() {
     const exists = await prisma.product.findFirst({ where: { name: p.name } });
     if (!exists) {
       await prisma.product.create({ data: p });
+    }
+  }
+
+  const defaultMethods: { name: string; kind: PaymentMethodKind; feePercent: number | null }[] = [
+    { name: "Dinheiro", kind: "DINHEIRO", feePercent: null },
+    { name: "PIX", kind: "DINHEIRO", feePercent: null },
+    { name: "Débito", kind: "DEBITO", feePercent: null },
+    { name: "Crédito Visa/Master", kind: "CREDITO", feePercent: 3 },
+    { name: "Vale refeição", kind: "VALE", feePercent: null },
+  ];
+  for (const m of defaultMethods) {
+    const exists = await prisma.paymentMethod.findFirst({ where: { name: m.name } });
+    if (!exists) {
+      await prisma.paymentMethod.create({ data: m });
     }
   }
 }

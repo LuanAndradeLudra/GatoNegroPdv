@@ -7,8 +7,8 @@ function AppRoutes() {
 
   if (state.status === "loading") {
     return (
-      <div className="app-loading">
-        <p>Carregando…</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#121212] font-sans text-sm text-zinc-500">
+        Carregando…
       </div>
     );
   }
