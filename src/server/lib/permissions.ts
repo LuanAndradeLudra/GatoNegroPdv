@@ -5,7 +5,7 @@ export type PermissionModule = (typeof PERMISSION_MODULES)[number];
 
 export const MODULE_ACTIONS: Record<PermissionModule, readonly string[]> = {
   VENDAS: ["abrir", "fechar", "desconto"],
-  ESTOQUE: ["entrada", "saida", "ajuste"],
+  ESTOQUE: ["entrada", "saida", "ajuste", "produtos"],
   FINANCEIRO: ["relatorios"],
   COZINHA: ["ver", "atualizar"],
   CLIENTES: ["cadastrar", "ver", "editar"],
@@ -156,6 +156,31 @@ export function canViewCustomerOrders(role: UserRole, map: PermissionsMap): bool
     return true;
   }
   return hasPermission(map, "CLIENTES", "ver");
+}
+
+export type StockAccessFlags = {
+  produtos: boolean;
+  entrada: boolean;
+  saida: boolean;
+  ajuste: boolean;
+};
+
+/** Permissões granulares do módulo Estoque (cadastro vs movimentação). */
+export function stockAccessFlags(role: UserRole, map: PermissionsMap): StockAccessFlags {
+  if (role === "ADMIN" || role === "GERENTE") {
+    return { produtos: true, entrada: true, saida: true, ajuste: true };
+  }
+  return {
+    produtos: hasPermission(map, "ESTOQUE", "produtos"),
+    entrada: hasPermission(map, "ESTOQUE", "entrada"),
+    saida: hasPermission(map, "ESTOQUE", "saida"),
+    ajuste: hasPermission(map, "ESTOQUE", "ajuste"),
+  };
+}
+
+export function canAccessStockModule(role: UserRole, map: PermissionsMap): boolean {
+  const f = stockAccessFlags(role, map);
+  return f.produtos || f.entrada || f.saida || f.ajuste;
 }
 
 export function parsePermissionsInput(raw: unknown): Partial<PermissionsMap> | null {

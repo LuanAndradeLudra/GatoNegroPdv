@@ -14,7 +14,6 @@ const productSelect = {
   name: true,
   price: true,
   stock: true,
-  productType: true,
   isKitchenItem: true,
   controlsStock: true,
   active: true,
@@ -24,13 +23,41 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-pdvRouter.get("/products", async (_req, res) => {
+pdvRouter.get("/products", async (req, res) => {
+  const orderId = typeof req.query.orderId === "string" ? req.query.orderId.trim() : "";
   const rows = await prisma.product.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
     select: productSelect,
   });
-  res.json({ products: rows });
+
+  let reservedMap = new Map<string, number>();
+  if (orderId) {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, status: true } });
+    if (order?.status === "OPEN") {
+      const stockIds = rows.filter((r) => r.controlsStock).map((r) => r.id);
+      if (stockIds.length > 0) {
+        const grouped = await prisma.orderItem.groupBy({
+          by: ["productId"],
+          where: {
+            productId: { in: stockIds },
+            orderId: { not: orderId },
+            order: { status: "OPEN" },
+          },
+          _sum: { quantity: true },
+        });
+        reservedMap = new Map(grouped.map((g) => [g.productId, round2(g._sum.quantity ?? 0)]));
+      }
+    }
+  }
+
+  res.json({
+    products: rows.map((r) => ({
+      ...r,
+      availableForOrder:
+        orderId && r.controlsStock ? round2(r.stock - (reservedMap.get(r.id) ?? 0)) : null,
+    })),
+  });
 });
 
 const orderInclude = {
@@ -38,7 +65,7 @@ const orderInclude = {
   customer: { select: { id: true, name: true, phone: true } },
   items: {
     include: {
-      product: { select: { name: true, isKitchenItem: true } },
+      product: { select: { name: true, isKitchenItem: true, controlsStock: true, stock: true } },
     },
     orderBy: { id: "asc" as const },
   },
@@ -65,7 +92,7 @@ type SerializedPayment = {
   cashReceived: number | null;
 };
 
-function serializeOrder(
+async function serializeOrder(
   order: {
     id: string;
     kind: OrderKind;
@@ -73,10 +100,10 @@ function serializeOrder(
     customerId: string | null;
     customer: { id: string; name: string; phone: string | null } | null;
     status: OrderStatus;
-  openedAt: Date;
-  closedAt: Date | null;
-  lastActivityAt?: Date | null;
-  cancelledAt: Date | null;
+    openedAt: Date;
+    closedAt: Date | null;
+    lastActivityAt?: Date | null;
+    cancelledAt: Date | null;
     closedCashRegisterId: string | null;
     createdById: string;
     createdBy: { id: string; name: string; login: string };
@@ -86,7 +113,7 @@ function serializeOrder(
       quantity: number;
       unitPrice: number;
       kitchenStatus: string | null;
-      product: { name: string; isKitchenItem: boolean };
+      product: { name: string; isKitchenItem: boolean; controlsStock: boolean; stock: number };
     }[];
     payments?: {
       id: string;
@@ -100,9 +127,26 @@ function serializeOrder(
   },
   extra?: { canReopen?: boolean },
 ) {
+  let reservedMap = new Map<string, number>();
+  if (order.status === "OPEN") {
+    const stockIds = [...new Set(order.items.filter((i) => i.product.controlsStock).map((i) => i.productId))];
+    if (stockIds.length > 0) {
+      const grouped = await prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: {
+          productId: { in: stockIds },
+          orderId: { not: order.id },
+          order: { status: "OPEN" },
+        },
+        _sum: { quantity: true },
+      });
+      reservedMap = new Map(grouped.map((g) => [g.productId, round2(g._sum.quantity ?? 0)]));
+    }
+  }
+
   const items = order.items.map((i) => {
     const lineTotal = round2(i.quantity * i.unitPrice);
-    return {
+    const base = {
       id: i.id,
       productId: i.productId,
       productName: i.product.name,
@@ -111,6 +155,24 @@ function serializeOrder(
       lineTotal,
       isKitchenItem: i.product.isKitchenItem,
       kitchenStatus: i.kitchenStatus,
+      controlsStock: i.product.controlsStock,
+    };
+    if (order.status !== "OPEN" || !i.product.controlsStock) {
+      return {
+        ...base,
+        stockPhysical: null as number | null,
+        reservedElsewhere: null as number | null,
+        maxQuantity: null as number | null,
+      };
+    }
+    const physical = round2(i.product.stock);
+    const other = reservedMap.get(i.productId) ?? 0;
+    const maxQuantity = round2(physical - other);
+    return {
+      ...base,
+      stockPhysical: physical,
+      reservedElsewhere: other,
+      maxQuantity,
     };
   });
   const subtotal = round2(items.reduce((s, i) => s + i.lineTotal, 0));
@@ -149,6 +211,31 @@ function serializeOrder(
     payments: paymentsOut,
     canReopen: extra?.canReopen,
   };
+}
+
+async function assertPdvStockForLine(orderId: string, productId: string, newQtyInCurrentOrder: number): Promise<void> {
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product || !product.controlsStock) {
+    return;
+  }
+  const physical = round2(product.stock);
+  const agg = await prisma.orderItem.aggregate({
+    where: {
+      productId,
+      orderId: { not: orderId },
+      order: { status: "OPEN" },
+    },
+    _sum: { quantity: true },
+  });
+  const other = round2(agg._sum.quantity ?? 0);
+  const maxAllowed = round2(physical - other);
+  if (newQtyInCurrentOrder > maxAllowed + 0.0001) {
+    throw new Error(
+      `Estoque insuficiente para "${product.name}". Máximo neste pedido: ${maxAllowed} un. (estoque físico ${physical}; ` +
+        (other > 0 ? `outras comandas abertas: ${other}` : "sem reserva em outras comandas") +
+        ").",
+    );
+  }
 }
 
 async function getOpenCashRegisterId(): Promise<string | null> {
@@ -307,8 +394,8 @@ pdvRouter.get("/orders", async (req, res) => {
     include: orderInclude,
   });
   const openCashId = await getOpenCashRegisterId();
-  res.json({
-    orders: rows.map((o) => {
+  const orders = await Promise.all(
+    rows.map(async (o) => {
       const canReopen =
         o.status === "CLOSED" &&
         !!o.closedCashRegisterId &&
@@ -316,7 +403,8 @@ pdvRouter.get("/orders", async (req, res) => {
         o.closedCashRegisterId === openCashId;
       return serializeOrder(o, { canReopen });
     }),
-  });
+  );
+  res.json({ orders });
 });
 
 pdvRouter.get("/orders/:id", async (req, res) => {
@@ -335,7 +423,7 @@ pdvRouter.get("/orders/:id", async (req, res) => {
     !!openId &&
     order.closedCashRegisterId === openId;
 
-  res.json({ order: serializeOrder(order, { canReopen }) });
+  res.json({ order: await serializeOrder(order, { canReopen }) });
 });
 
 pdvRouter.post("/orders", requireOpenCashRegister, async (req, res) => {
@@ -369,7 +457,7 @@ pdvRouter.post("/orders", requireOpenCashRegister, async (req, res) => {
     include: orderInclude,
   });
 
-  res.status(201).json({ order: serializeOrder(created) });
+  res.status(201).json({ order: await serializeOrder(created) });
 });
 
 pdvRouter.patch("/orders/:id", requireOpenCashRegister, async (req, res) => {
@@ -414,7 +502,7 @@ pdvRouter.patch("/orders/:id", requireOpenCashRegister, async (req, res) => {
     include: orderInclude,
   });
 
-  res.json({ order: serializeOrder(updated) });
+  res.json({ order: await serializeOrder(updated) });
 });
 
 pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) => {
@@ -454,6 +542,12 @@ pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) =>
 
   if (existing) {
     const newQty = Math.round((existing.quantity + q) * 1000) / 1000;
+    try {
+      await assertPdvStockForLine(orderId, productId, newQty);
+    } catch (e) {
+      res.status(409).json({ error: e instanceof Error ? e.message : "Estoque insuficiente." });
+      return;
+    }
     await prisma.orderItem.update({
       where: { id: existing.id },
       data: {
@@ -470,7 +564,14 @@ pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) =>
       res.status(500).json({ error: "Erro ao recarregar pedido." });
       return;
     }
-    res.status(200).json({ order: serializeOrder(full) });
+    res.status(200).json({ order: await serializeOrder(full) });
+    return;
+  }
+
+  try {
+    await assertPdvStockForLine(orderId, productId, q);
+  } catch (e) {
+    res.status(409).json({ error: e instanceof Error ? e.message : "Estoque insuficiente." });
     return;
   }
 
@@ -495,7 +596,7 @@ pdvRouter.post("/orders/:id/items", requireOpenCashRegister, async (req, res) =>
     res.status(500).json({ error: "Erro ao recarregar pedido." });
     return;
   }
-  res.status(201).json({ order: serializeOrder(full) });
+  res.status(201).json({ order: await serializeOrder(full) });
 });
 
 pdvRouter.patch("/orders/:orderId/items/:itemId", requireOpenCashRegister, async (req, res) => {
@@ -528,6 +629,12 @@ pdvRouter.patch("/orders/:orderId/items/:itemId", requireOpenCashRegister, async
   }
 
   const q = Math.round(quantity * 1000) / 1000;
+  try {
+    await assertPdvStockForLine(orderId, item.productId, q);
+  } catch (e) {
+    res.status(409).json({ error: e instanceof Error ? e.message : "Estoque insuficiente." });
+    return;
+  }
   await prisma.orderItem.update({
     where: { id: itemId },
     data: { quantity: q },
@@ -538,7 +645,7 @@ pdvRouter.patch("/orders/:orderId/items/:itemId", requireOpenCashRegister, async
     where: { id: orderId },
     include: orderInclude,
   });
-  res.json({ order: full ? serializeOrder(full) : null });
+  res.json({ order: full ? await serializeOrder(full) : null });
 });
 
 pdvRouter.delete("/orders/:orderId/items/:itemId", requireOpenCashRegister, async (req, res) => {
@@ -565,7 +672,7 @@ pdvRouter.delete("/orders/:orderId/items/:itemId", requireOpenCashRegister, asyn
     where: { id: orderId },
     include: orderInclude,
   });
-  res.json({ order: full ? serializeOrder(full) : null });
+  res.json({ order: full ? await serializeOrder(full) : null });
 });
 
 type PaymentLineInput = {
@@ -621,7 +728,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
         include: orderIncludeWithPayments,
       });
     });
-    res.json({ order: serializeOrder(closed) });
+    res.json({ order: await serializeOrder(closed) });
     return;
   }
 
@@ -722,7 +829,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
         include: orderIncludeWithPayments,
       });
     });
-    res.json({ order: serializeOrder(closed) });
+    res.json({ order: await serializeOrder(closed) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao fechar pedido.";
     res.status(400).json({ error: msg });
@@ -761,7 +868,7 @@ pdvRouter.post("/orders/:id/reopen", requireOpenCashRegister, async (req, res) =
         include: orderInclude,
       });
     });
-    res.json({ order: serializeOrder(updated) });
+    res.json({ order: await serializeOrder(updated) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao reabrir.";
     res.status(400).json({ error: msg });
@@ -797,7 +904,7 @@ pdvRouter.post("/orders/:id/cancel", requireOpenCashRegister, async (req, res) =
       where: { id: orderId },
       include: orderInclude,
     });
-    res.json({ order: full ? serializeOrder(full) : null });
+    res.json({ order: full ? await serializeOrder(full) : null });
     return;
   }
 
@@ -817,7 +924,7 @@ pdvRouter.post("/orders/:id/cancel", requireOpenCashRegister, async (req, res) =
           include: orderIncludeWithPayments,
         });
       });
-      res.json({ order: serializeOrder(updated) });
+      res.json({ order: await serializeOrder(updated) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao cancelar.";
       res.status(400).json({ error: msg });

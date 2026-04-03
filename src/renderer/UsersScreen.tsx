@@ -42,6 +42,7 @@ const ACTION_LABELS: Record<string, string> = {
   entrada: "Entrada de mercadoria",
   saida: "Saída",
   ajuste: "Ajuste",
+  produtos: "Cadastro de produtos",
   relatorios: "Ver relatórios",
   ver: "Ver pedidos / listar",
   atualizar: "Atualizar pedidos",

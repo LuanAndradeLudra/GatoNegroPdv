@@ -9,22 +9,9 @@ import { useAuth } from "./AuthContext";
 import { ModuleLockOverlay } from "./components/ModuleLockOverlay";
 import { PdvScreen, type PdvBootPayload } from "./PdvScreen";
 import { PaymentMethodsScreen } from "./PaymentMethodsScreen";
+import { ErpStockScreen } from "./ErpStockScreen";
 import { UsersScreen } from "./UsersScreen";
 import { AppShell, type ShellView } from "./components/AppShell";
-import { Card, CardContent } from "./ui/Card";
-
-function ErpPlaceholder() {
-  return (
-    <div className="mx-auto max-w-lg px-6 py-12">
-      <Card>
-        <CardContent className="!py-10 text-center">
-          <p className="text-lg font-medium text-zinc-200">Módulo ERP</p>
-          <p className="mt-2 text-sm text-zinc-500">Integração de estoque e cadastros em desenvolvimento.</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 export function HubScreen() {
   const { state, logout } = useAuth();
@@ -139,7 +126,7 @@ export function HubScreen() {
               <PdvScreen boot={pdvBoot} onBootConsumed={clearPdvBoot} />
             </ModuleLockOverlay>
           ) : null}
-          {view === "erp" ? <ErpPlaceholder /> : null}
+          {view === "erp" ? <ErpStockScreen /> : null}
           {view === "users" ? <UsersScreen /> : null}
           {view === "cozinha" ? (
             <ModuleLockOverlay active={cashOpen === false && !!access.kitchen} onGoToCash={() => setView("caixa")}>

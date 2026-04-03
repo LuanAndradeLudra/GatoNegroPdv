@@ -31,6 +31,7 @@ model User {
   cashRegistersClosed CashRegister[] @relation("CashClosedBy")
   cashMovements       CashMovement[] @relation("CashMovementCreatedBy")
   ordersCreated       Order[]         @relation("OrderCreatedBy")
+  stockMovements      StockMovement[] @relation("StockMovementCreatedBy")
 }
 
 model Customer {
@@ -46,9 +47,10 @@ model Customer {
   orders    Order[]
 }
 
-enum ProductType {
-  GELADO
-  QUENTE
+enum StockMovementKind {
+  ENTRADA
+  SAIDA
+  AJUSTE
 }
 
 model Product {
@@ -56,13 +58,26 @@ model Product {
   name          String
   price         Float
   stock         Float       @default(0)
-  productType   ProductType @default(GELADO)
   isKitchenItem Boolean     @default(false)
   controlsStock Boolean     @default(true)
   active        Boolean     @default(true)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   orderItems    OrderItem[]
+  stockMovements StockMovement[]
+}
+
+model StockMovement {
+  id            String            @id @default(cuid())
+  productId     String
+  product       Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind          StockMovementKind
+  balanceBefore Float
+  balanceAfter  Float
+  note          String?
+  createdById   String
+  createdBy     User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
 }
 
 enum OrderKind {

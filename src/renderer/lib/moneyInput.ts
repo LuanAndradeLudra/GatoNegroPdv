@@ -13,6 +13,14 @@ export function formatDigitsAsBRL(digits: string): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Converte valor em reais para string de dígitos (centavos) para a máscara. */
+export function reaisToDigits(reais: number): string {
+  if (!Number.isFinite(reais) || reais < 0) {
+    return "";
+  }
+  return String(Math.round(reais * 100));
+}
+
 /** Converte string de dígitos (ou valor já formatado) em reais. */
 export function parseDigitsToReais(digits: string): number | null {
   const d = digits.replace(/\D/g, "");

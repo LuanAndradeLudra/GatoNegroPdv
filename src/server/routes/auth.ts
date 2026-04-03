@@ -9,6 +9,7 @@ import {
   canOpenPdv,
   canViewCustomerOrders,
   resolvePermissions,
+  stockAccessFlags,
 } from "../lib/permissions.js";
 import { authMiddleware, signToken } from "../middleware/auth.js";
 
@@ -35,6 +36,7 @@ function serializeSessionUser(user: {
       kitchen: canAccessKitchen(user.role, permissions),
       clients: canAccessClients(user.role, permissions),
       customerOrders: canViewCustomerOrders(user.role, permissions),
+      stock: stockAccessFlags(user.role, permissions),
     },
   };
 }

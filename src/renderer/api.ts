@@ -24,6 +24,13 @@ export type PermissionModule = "VENDAS" | "ESTOQUE" | "FINANCEIRO" | "COZINHA" |
 
 export type PermissionsMap = Record<PermissionModule, string[]>;
 
+export type StockAccessFlags = {
+  produtos: boolean;
+  entrada: boolean;
+  saida: boolean;
+  ajuste: boolean;
+};
+
 export type UserAccess = {
   pdv: boolean;
   erp: boolean;
@@ -32,6 +39,8 @@ export type UserAccess = {
   clients: boolean;
   /** Relatório de comandas por cliente (financeiro / listagem). */
   customerOrders: boolean;
+  /** Permissões do módulo Estoque (ERP). Opcional até novo login após atualização. */
+  stock?: StockAccessFlags;
 };
 
 export type User = {
@@ -278,10 +287,11 @@ export type PdvProduct = {
   name: string;
   price: number;
   stock: number;
-  productType: "GELADO" | "QUENTE";
   isKitchenItem: boolean;
   controlsStock: boolean;
   active: boolean;
+  /** Com `orderId` na listagem: quanto ainda pode ir neste pedido (estoque físico − outras comandas abertas). */
+  availableForOrder: number | null;
 };
 
 export type PdvOrderItem = {
@@ -293,6 +303,11 @@ export type PdvOrderItem = {
   lineTotal: number;
   isKitchenItem: boolean;
   kitchenStatus: string | null;
+  controlsStock: boolean;
+  stockPhysical: number | null;
+  reservedElsewhere: number | null;
+  /** Limite de quantidade neste pedido para o produto (só preenchido em pedido aberto com controle de estoque). */
+  maxQuantity: number | null;
 };
 
 export type PaymentMethodKind = "DINHEIRO" | "DEBITO" | "CREDITO" | "VALE";
@@ -382,8 +397,9 @@ export async function apiDeletePaymentMethod(token: string, id: string): Promise
   throw new Error(data.error ?? `Erro HTTP ${res.status}`);
 }
 
-export async function apiPdvProducts(token: string): Promise<PdvProduct[]> {
-  const res = await fetch("/api/pdv/products", { headers: authHeaders(token) });
+export async function apiPdvProducts(token: string, orderId?: string | null): Promise<PdvProduct[]> {
+  const qs = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
+  const res = await fetch(`/api/pdv/products${qs}`, { headers: authHeaders(token) });
   const data = await parseJson<{ products: PdvProduct[] }>(res);
   return data.products;
 }
@@ -684,4 +700,134 @@ export async function apiKitchenSetStatus(
     body: JSON.stringify({ status }),
   });
   return parseJson(res);
+}
+
+export type ErpProductRow = {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  isKitchenItem: boolean;
+  controlsStock: boolean;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StockMovementRow = {
+  id: string;
+  kind: "ENTRADA" | "SAIDA" | "AJUSTE";
+  balanceBefore: number;
+  balanceAfter: number;
+  delta: number;
+  note: string | null;
+  createdAt: string;
+  product: { id: string; name: string };
+  createdBy: { id: string; name: string };
+};
+
+export async function apiStockProducts(token: string): Promise<ErpProductRow[]> {
+  const res = await fetch("/api/stock/products", { headers: authHeaders(token) });
+  const data = await parseJson<{ products: ErpProductRow[] }>(res);
+  return data.products;
+}
+
+export async function apiStockCreateProduct(
+  token: string,
+  body: {
+    name: string;
+    price: number;
+    isKitchenItem?: boolean;
+    controlsStock?: boolean;
+    active?: boolean;
+    initialStock?: number;
+  },
+): Promise<ErpProductRow> {
+  const res = await fetch("/api/stock/products", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ product: ErpProductRow }>(res);
+  return data.product;
+}
+
+export async function apiStockPatchProduct(
+  token: string,
+  id: string,
+  body: Partial<{
+    name: string;
+    price: number;
+    isKitchenItem: boolean;
+    controlsStock: boolean;
+    active: boolean;
+  }>,
+): Promise<ErpProductRow> {
+  const res = await fetch(`/api/stock/products/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ product: ErpProductRow }>(res);
+  return data.product;
+}
+
+export async function apiStockDeleteProduct(token: string, id: string): Promise<void> {
+  const res = await fetch(`/api/stock/products/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (res.ok) {
+    return;
+  }
+  const text = await res.text();
+  let msg = `Erro HTTP ${res.status}`;
+  const trimmed = text.trim();
+  if (trimmed) {
+    try {
+      const data = JSON.parse(trimmed) as { error?: string };
+      if (typeof data.error === "string") {
+        msg = data.error;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  throw new Error(msg);
+}
+
+export async function apiStockMovements(
+  token: string,
+  q?: { productId?: string; take?: number },
+): Promise<StockMovementRow[]> {
+  const params = new URLSearchParams();
+  if (q?.productId) {
+    params.set("productId", q.productId);
+  }
+  if (q?.take != null) {
+    params.set("take", String(q.take));
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/stock/movements${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  const data = await parseJson<{ movements: StockMovementRow[] }>(res);
+  return data.movements;
+}
+
+export async function apiStockCreateMovement(
+  token: string,
+  body: {
+    kind: "ENTRADA" | "SAIDA" | "AJUSTE";
+    productId: string;
+    quantity?: number;
+    newStock?: number;
+    note?: string | null;
+  },
+): Promise<StockMovementRow> {
+  const res = await fetch("/api/stock/movements", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ movement: StockMovementRow }>(res);
+  return data.movement;
 }

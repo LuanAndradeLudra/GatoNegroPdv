@@ -28,6 +28,10 @@ import { Input } from "./ui/Input";
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+function qtyInOrder(ord: PdvOrder, productId: string): number {
+  return ord.items.filter((i) => i.productId === productId).reduce((s, i) => s + i.quantity, 0);
+}
+
 function kitchenStatusLabel(status: string | null): string | null {
   if (!status) {
     return null;
@@ -79,9 +83,10 @@ export function PdvScreen({
     if (!token) {
       return;
     }
-    const list = await apiPdvProducts(token);
+    const orderId = step === "selling" && order ? order.id : undefined;
+    const list = await apiPdvProducts(token, orderId);
     setProducts(list);
-  }, [token]);
+  }, [token, step, order?.id]);
 
   const loadOpenComandas = useCallback(async () => {
     if (!token) {
@@ -247,11 +252,20 @@ export function PdvScreen({
     if (!token || !order) {
       return;
     }
+    const oid = order.id;
+    const inCart = order.items.filter((i) => i.productId === p.id).reduce((s, i) => s + i.quantity, 0);
+    const cap = p.controlsStock && p.availableForOrder != null ? p.availableForOrder : null;
+    if (cap != null && inCart + 1 > cap + 1e-6) {
+      setError(`Limite de estoque para "${p.name}". Máximo neste pedido: ${cap} un.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const next = await apiPdvAddItem(token, order.id, p.id, 1);
+      const next = await apiPdvAddItem(token, oid, p.id, 1);
       setOrder(next);
+      const list = await apiPdvProducts(token, oid);
+      setProducts(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao adicionar");
     } finally {
@@ -263,11 +277,19 @@ export function PdvScreen({
     if (!token || !order || qty <= 0) {
       return;
     }
+    const oid = order.id;
+    const line = order.items.find((i) => i.id === itemId);
+    if (line?.maxQuantity != null && qty > line.maxQuantity + 1e-6) {
+      setError(`Quantidade máxima para "${line.productName}": ${line.maxQuantity} un.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const next = await apiPdvUpdateItemQty(token, order.id, itemId, qty);
+      const next = await apiPdvUpdateItemQty(token, oid, itemId, qty);
       setOrder(next);
+      const list = await apiPdvProducts(token, oid);
+      setProducts(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao atualizar");
     } finally {
@@ -279,11 +301,14 @@ export function PdvScreen({
     if (!token || !order) {
       return;
     }
+    const oid = order.id;
     setBusy(true);
     setError(null);
     try {
-      const next = await apiPdvRemoveItem(token, order.id, itemId);
+      const next = await apiPdvRemoveItem(token, oid, itemId);
       setOrder(next);
+      const list = await apiPdvProducts(token, oid);
+      setProducts(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao remover");
     } finally {
@@ -412,6 +437,15 @@ export function PdvScreen({
                       {kitchenStatusLabel(i.kitchenStatus)}
                     </span>
                   ) : null}
+                  {i.controlsStock && i.maxQuantity != null ? (
+                    <span className="mt-0.5 block text-[10px] text-zinc-500">
+                      Estoque (máx. neste pedido): {i.maxQuantity}
+                      {i.stockPhysical != null ? ` · Físico ${i.stockPhysical}` : ""}
+                      {i.reservedElsewhere != null && i.reservedElsewhere > 0
+                        ? ` · Outras comandas: ${i.reservedElsewhere}`
+                        : ""}
+                    </span>
+                  ) : null}
                   <div className="mt-1 text-xs text-zinc-500">
                     {money.format(i.unitPrice)} ×{" "}
                     <span className="inline-flex items-center gap-1 align-middle">
@@ -433,7 +467,17 @@ export function PdvScreen({
                       <button
                         type="button"
                         className="rounded border border-white/15 bg-zinc-900 px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800"
-                        disabled={busy}
+                        disabled={
+                          busy ||
+                          (i.controlsStock &&
+                            i.maxQuantity != null &&
+                            i.quantity >= i.maxQuantity - 1e-6)
+                        }
+                        title={
+                          i.controlsStock && i.maxQuantity != null && i.quantity >= i.maxQuantity - 1e-6
+                            ? "Limite de estoque para este pedido"
+                            : undefined
+                        }
                         onClick={() => void changeQty(i.id, i.quantity + 1)}
                       >
                         +
@@ -578,21 +622,39 @@ export function PdvScreen({
               onChange={(e) => setFilter(e.target.value)}
             />
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
-              {filteredProducts.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="flex flex-col items-start gap-1 rounded-lg border border-white/[0.08] bg-[#1e1e1e]/80 p-3 text-left text-sm transition-colors hover:border-amber-500/30 hover:bg-[#222]"
-                  onClick={() => void addProduct(p)}
-                  disabled={busy}
-                >
-                  <span className="font-medium text-zinc-100">{p.name}</span>
-                  <span className="text-[11px] text-zinc-500">
-                    {money.format(p.price)} · {p.productType === "GELADO" ? "Gelado" : "Quente"}
-                    {p.isKitchenItem ? " · Cozinha" : ""}
-                  </span>
-                </button>
-              ))}
+              {filteredProducts.map((p) => {
+                const inCart = order ? qtyInOrder(order, p.id) : 0;
+                const cap = p.controlsStock && p.availableForOrder != null ? p.availableForOrder : null;
+                const remaining =
+                  cap != null ? Math.max(0, Math.round((cap - inCart) * 1000) / 1000) : null;
+                const atCap = cap != null && inCart >= cap - 1e-6;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={cn(
+                      "flex flex-col items-start gap-1 rounded-lg border border-white/[0.08] bg-[#1e1e1e]/80 p-3 text-left text-sm transition-colors hover:border-amber-500/30 hover:bg-[#222]",
+                      atCap && "cursor-not-allowed opacity-50 hover:border-white/[0.08] hover:bg-[#1e1e1e]/80",
+                    )}
+                    onClick={() => void addProduct(p)}
+                    disabled={busy || atCap}
+                    title={atCap ? "Sem quantidade disponível para este pedido (estoque ou reserva em outras comandas)" : undefined}
+                  >
+                    <span className="font-medium text-zinc-100">{p.name}</span>
+                    <span className="text-[11px] text-zinc-500">
+                      {money.format(p.price)}
+                      {p.isKitchenItem ? " · Cozinha" : ""}
+                    </span>
+                    {p.controlsStock ? (
+                      <span className="text-[10px] leading-snug text-zinc-500">
+                        Físico: {p.stock}
+                        {cap != null ? ` · Máx. este pedido: ${cap}` : ""}
+                        {remaining != null ? ` · Falta lançar: ${remaining}` : ""}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
