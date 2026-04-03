@@ -35,6 +35,19 @@ model User {
   stockMovements      StockMovement[] @relation("StockMovementCreatedBy")
 }
 
+/// Configuração global (uma linha id = default): padrões para novos pedidos.
+model CommercialSettings {
+  id     String @id @default("default")
+  couvertEnabled Boolean @default(false)
+  couvertMode    CommercialChargeMode @default(PERCENT)
+  /// % (ex.: 10) ou valor fixo em R$, conforme couvertMode.
+  couvertValue   Float @default(0)
+  serviceFeeEnabled Boolean @default(false)
+  serviceFeeMode    CommercialChargeMode @default(PERCENT)
+  serviceFeeValue   Float @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model Customer {
   id        String   @id @default(cuid())
   name      String
@@ -109,6 +122,11 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum CommercialChargeMode {
+  PERCENT
+  FIXED
+}
+
 enum KitchenItemStatus {
   PENDING
   QUEUE
@@ -138,6 +156,12 @@ model Order {
   closedBy    User?       @relation("OrderClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   createdById String
   createdBy   User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  couvertEnabled Boolean @default(false)
+  couvertMode    CommercialChargeMode @default(PERCENT)
+  couvertValue   Float @default(0)
+  serviceFeeEnabled Boolean @default(false)
+  serviceFeeMode    CommercialChargeMode @default(PERCENT)
+  serviceFeeValue   Float @default(0)
   items       OrderItem[]
   payments    OrderPayment[]
 }

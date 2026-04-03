@@ -327,6 +327,8 @@ export type OrderPaymentRow = {
   cashReceived: number | null;
 };
 
+export type CommercialChargeMode = "PERCENT" | "FIXED";
+
 export type PdvOrder = {
   id: string;
   kind: "DIRECT" | "COMANDA";
@@ -343,9 +345,31 @@ export type PdvOrder = {
   /** Quem registrou o fechamento (pagamento); vendas antigas podem ser null. */
   closedBy?: { id: string; name: string; login: string } | null;
   items: PdvOrderItem[];
+  /** Soma dos itens (sem couvert / taxa). */
   subtotal: number;
+  couvertAmount?: number;
+  serviceFeeAmount?: number;
+  /** Total a pagar (itens + couvert + taxa). */
+  totalDue?: number;
+  couvertEnabled?: boolean;
+  couvertMode?: CommercialChargeMode;
+  couvertValue?: number;
+  serviceFeeEnabled?: boolean;
+  serviceFeeMode?: CommercialChargeMode;
+  serviceFeeValue?: number;
   payments?: OrderPaymentRow[];
   canReopen?: boolean;
+};
+
+export type CommercialSettingsRow = {
+  id: string;
+  couvertEnabled: boolean;
+  couvertMode: CommercialChargeMode;
+  couvertValue: number;
+  serviceFeeEnabled: boolean;
+  serviceFeeMode: CommercialChargeMode;
+  serviceFeeValue: number;
+  updatedAt: string;
 };
 
 export type PaymentMethodRow = {
@@ -401,6 +425,32 @@ export async function apiDeletePaymentMethod(token: string, id: string): Promise
   }
   const data = (await res.json().catch(() => ({}))) as { error?: string };
   throw new Error(data.error ?? `Erro HTTP ${res.status}`);
+}
+
+export async function apiCommercialSettingsGet(token: string): Promise<CommercialSettingsRow> {
+  const res = await fetch("/api/commercial-settings", { headers: authHeaders(token) });
+  const data = await parseJson<{ settings: CommercialSettingsRow }>(res);
+  return data.settings;
+}
+
+export async function apiCommercialSettingsPatch(
+  token: string,
+  body: Partial<{
+    couvertEnabled: boolean;
+    couvertMode: CommercialChargeMode;
+    couvertValue: number;
+    serviceFeeEnabled: boolean;
+    serviceFeeMode: CommercialChargeMode;
+    serviceFeeValue: number;
+  }>,
+): Promise<CommercialSettingsRow> {
+  const res = await fetch("/api/commercial-settings", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ settings: CommercialSettingsRow }>(res);
+  return data.settings;
 }
 
 export async function apiPdvProducts(token: string, orderId?: string | null): Promise<PdvProduct[]> {
@@ -489,7 +539,16 @@ export async function apiPdvCreateOrder(
 export async function apiPdvPatchOrder(
   token: string,
   orderId: string,
-  body: { clientName?: string | null; customerId?: string | null },
+  body: {
+    clientName?: string | null;
+    customerId?: string | null;
+    couvertEnabled?: boolean;
+    couvertMode?: CommercialChargeMode;
+    couvertValue?: number;
+    serviceFeeEnabled?: boolean;
+    serviceFeeMode?: CommercialChargeMode;
+    serviceFeeValue?: number;
+  },
 ): Promise<PdvOrder> {
   const res = await fetch(`/api/pdv/orders/${orderId}`, {
     method: "PATCH",
@@ -652,6 +711,9 @@ export type CustomerOrderReportLine = {
   openedAt: string;
   closedAt: string | null;
   subtotal: number;
+  couvertAmount: number;
+  serviceFeeAmount: number;
+  totalDue: number;
   createdBy: { id: string; name: string; login: string };
   items: { productName: string; quantity: number; unitPrice: number; lineTotal: number }[];
 };

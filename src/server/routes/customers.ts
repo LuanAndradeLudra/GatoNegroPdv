@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { OrderKind, OrderStatus, Prisma } from "@prisma/client";
+import type { CommercialChargeMode, OrderKind, OrderStatus, Prisma } from "@prisma/client";
+import { computeCommercialAmounts } from "../lib/orderCommercial.js";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
 import {
@@ -34,9 +35,23 @@ function serializeOrderRow(order: {
   customer: { id: string; name: string; phone: string | null } | null;
   createdBy: { id: string; name: string; login: string };
   items: { quantity: number; unitPrice: number; product: { name: string } }[];
+  couvertEnabled: boolean;
+  couvertMode: CommercialChargeMode;
+  couvertValue: number;
+  serviceFeeEnabled: boolean;
+  serviceFeeMode: CommercialChargeMode;
+  serviceFeeValue: number;
 }) {
-  const subtotal =
+  const itemsSubtotal =
     Math.round(order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0) * 100) / 100;
+  const comm = computeCommercialAmounts(itemsSubtotal, {
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
+  });
   return {
     id: order.id,
     kind: order.kind,
@@ -45,7 +60,10 @@ function serializeOrderRow(order: {
     status: order.status,
     openedAt: order.openedAt.toISOString(),
     closedAt: order.closedAt?.toISOString() ?? null,
-    subtotal,
+    subtotal: comm.subtotal,
+    couvertAmount: comm.couvertAmount,
+    serviceFeeAmount: comm.serviceFeeAmount,
+    totalDue: comm.totalDue,
     createdBy: order.createdBy,
   };
 }
@@ -170,7 +188,7 @@ customersRouter.get("/:id/orders", requireCustomerOrdersReport, async (req, res)
     })),
   }));
 
-  const total = Math.round(orders.reduce((s, o) => s + o.subtotal, 0) * 100) / 100;
+  const total = Math.round(orders.reduce((s, o) => s + o.totalDue, 0) * 100) / 100;
 
   res.json({
     customer: { id: customer.id, name: customer.name },

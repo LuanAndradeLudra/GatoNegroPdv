@@ -1,5 +1,6 @@
-import type { OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
+import type { CommercialChargeMode, OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
 import { Router } from "express";
+import { computeCommercialAmounts } from "../lib/orderCommercial.js";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireFinanceiro } from "../middleware/financeAccess.js";
@@ -87,6 +88,12 @@ function serializeFinanceClosedOrder(order: {
   closedCashRegisterId: string | null;
   createdBy: { id: string; name: string; login: string };
   closedBy: { id: string; name: string; login: string } | null;
+  couvertEnabled: boolean;
+  couvertMode: CommercialChargeMode;
+  couvertValue: number;
+  serviceFeeEnabled: boolean;
+  serviceFeeMode: CommercialChargeMode;
+  serviceFeeValue: number;
   items: {
     id: string;
     productId: string;
@@ -122,7 +129,15 @@ function serializeFinanceClosedOrder(order: {
       maxQuantity: null as number | null,
     };
   });
-  const subtotal = round2(items.reduce((s, i) => s + i.lineTotal, 0));
+  const itemsSubtotal = round2(items.reduce((s, i) => s + i.lineTotal, 0));
+  const comm = computeCommercialAmounts(itemsSubtotal, {
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
+  });
   const paymentsOut = order.payments.map((p) => ({
     id: p.id,
     paymentMethodId: p.paymentMethodId,
@@ -150,7 +165,16 @@ function serializeFinanceClosedOrder(order: {
     createdBy: order.createdBy,
     closedBy: order.closedBy,
     items,
-    subtotal,
+    subtotal: itemsSubtotal,
+    couvertAmount: comm.couvertAmount,
+    serviceFeeAmount: comm.serviceFeeAmount,
+    totalDue: comm.totalDue,
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
     payments: paymentsOut,
     canReopen: false,
   };

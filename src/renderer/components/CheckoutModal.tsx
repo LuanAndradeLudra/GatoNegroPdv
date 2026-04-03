@@ -31,14 +31,21 @@ type DraftLine = {
 
 export function CheckoutModal({
   open,
-  subtotal,
+  totalDue,
+  itemsSubtotal,
+  couvertAmount,
+  serviceFeeAmount,
   methods,
   busy,
   onClose,
   onConfirm,
 }: {
   open: boolean;
-  subtotal: number;
+  /** Total a liquidar (itens + couvert + taxa). */
+  totalDue: number;
+  itemsSubtotal?: number;
+  couvertAmount?: number;
+  serviceFeeAmount?: number;
   methods: PaymentMethodRow[];
   busy: boolean;
   onClose: () => void;
@@ -56,10 +63,10 @@ export function CheckoutModal({
   }, [open]);
 
   const paid = useMemo(() => round2(lines.reduce((s, l) => s + l.amountPaid, 0)), [lines]);
-  const remaining = round2(subtotal - paid);
+  const remaining = round2(totalDue - paid);
 
   function startDraft(methodId: string) {
-    const rem = round2(subtotal - paid);
+    const rem = round2(totalDue - paid);
     const cents = Math.max(0, Math.round(rem * 100));
     setDraft({
       paymentMethodId: methodId,
@@ -107,9 +114,9 @@ export function CheckoutModal({
   }
 
   const canConfirm =
-    subtotal <= 0
+    totalDue <= 0
       ? true
-      : activeMethods.length > 0 && lines.length > 0 && Math.abs(round2(subtotal - paid)) <= 0.02;
+      : activeMethods.length > 0 && lines.length > 0 && Math.abs(round2(totalDue - paid)) <= 0.02;
 
   if (!open) {
     return null;
@@ -146,16 +153,35 @@ export function CheckoutModal({
             <h2 id="checkout-title" className="text-lg font-semibold text-zinc-100">
               Pagamento
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Total do pedido: <span className="font-semibold text-amber-200/95">{money.format(subtotal)}</span>
-            </p>
+            <div className="mt-1 space-y-1 text-sm text-zinc-500">
+              {itemsSubtotal != null && (couvertAmount ?? 0) + (serviceFeeAmount ?? 0) > 0.001 ? (
+                <p className="text-[11px] leading-relaxed">
+                  Itens {money.format(itemsSubtotal)}
+                  {(couvertAmount ?? 0) > 0.001 ? (
+                    <span>
+                      {" "}
+                      · Couvert {money.format(couvertAmount ?? 0)}
+                    </span>
+                  ) : null}
+                  {(serviceFeeAmount ?? 0) > 0.001 ? (
+                    <span>
+                      {" "}
+                      · Taxa serviço {money.format(serviceFeeAmount ?? 0)}
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
+              <p>
+                Total: <span className="font-semibold text-amber-200/95">{money.format(totalDue)}</span>
+              </p>
+            </div>
           </div>
           <Button type="button" variant="outline" className="!py-1.5 text-xs" disabled={busy} onClick={onClose}>
             Fechar
           </Button>
         </div>
 
-        {subtotal <= 0 ? (
+        {totalDue <= 0 ? (
           <div className="mt-6 space-y-4">
             <p className="text-sm text-zinc-400">Pedido sem valor. Confirme para encerrar.</p>
             <Button type="button" className="w-full" disabled={busy} onClick={() => onConfirm([])}>

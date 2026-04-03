@@ -153,10 +153,32 @@ export function ClosedOrderReportModal({
                   </dd>
                 </div>
               ) : null}
+              {(data.couvertAmount ?? 0) > 0.001 || (data.serviceFeeAmount ?? 0) > 0.001 ? (
+                <>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-[11px] uppercase text-zinc-500">Subtotal (itens)</dt>
+                    <dd className="text-right tabular-nums text-zinc-300">{money.format(data.subtotal)}</dd>
+                  </div>
+                  {(data.couvertAmount ?? 0) > 0.001 ? (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-[11px] uppercase text-zinc-500">Couvert</dt>
+                      <dd className="text-right tabular-nums text-zinc-300">{money.format(data.couvertAmount ?? 0)}</dd>
+                    </div>
+                  ) : null}
+                  {(data.serviceFeeAmount ?? 0) > 0.001 ? (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-[11px] uppercase text-zinc-500">Taxa de serviço</dt>
+                      <dd className="text-right tabular-nums text-zinc-300">{money.format(data.serviceFeeAmount ?? 0)}</dd>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               <div className="flex justify-between gap-2 border-t border-white/[0.06] pt-2">
-                <dt className="text-[11px] uppercase text-zinc-500">Subtotal itens</dt>
+                <dt className="text-[11px] uppercase text-zinc-500">
+                  {(data.couvertAmount ?? 0) > 0.001 || (data.serviceFeeAmount ?? 0) > 0.001 ? "Total" : "Subtotal itens"}
+                </dt>
                 <dd className="text-right text-lg font-semibold tabular-nums text-amber-200/95">
-                  {money.format(data.subtotal)}
+                  {money.format(data.totalDue ?? data.subtotal)}
                 </dd>
               </div>
             </dl>

@@ -19,6 +19,7 @@ import {
   type PdvOrder,
   type PdvProduct,
   type PaymentMethodRow,
+  type CommercialChargeMode,
 } from "./api";
 import { useAuth } from "./AuthContext";
 import { CheckoutModal, type CheckoutPaymentLine } from "./components/CheckoutModal";
@@ -233,9 +234,33 @@ export function PdvScreen({
   }, [products, filter]);
 
   const openComandasTotal = useMemo(
-    () => Math.round(openComandas.reduce((s, o) => s + o.subtotal, 0) * 100) / 100,
+    () =>
+      Math.round(openComandas.reduce((s, o) => s + (o.totalDue ?? o.subtotal), 0) * 100) / 100,
     [openComandas],
   );
+
+  async function patchOrderCommercial(updates: {
+    couvertEnabled?: boolean;
+    couvertMode?: CommercialChargeMode;
+    couvertValue?: number;
+    serviceFeeEnabled?: boolean;
+    serviceFeeMode?: CommercialChargeMode;
+    serviceFeeValue?: number;
+  }) {
+    if (!token || !order) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await apiPdvPatchOrder(token, order.id, updates);
+      setOrder(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao atualizar");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startDirect() {
     if (!token) {
@@ -591,12 +616,136 @@ export function PdvScreen({
           </ul>
         )}
       </div>
+      {order && step === "selling" ? (
+        <div className="border-t border-white/[0.06] bg-[#161616]/90 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Couvert e taxa de serviço</p>
+          <p className="mt-0.5 text-[10px] text-zinc-600">
+            % incide sobre o subtotal dos itens. Novos pedidos herdam o padrão de Configurações.
+          </p>
+          <div className="mt-3 space-y-3">
+            <div className="rounded-lg border border-white/[0.06] bg-[#141414]/80 p-2.5">
+              <label className="flex items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={order.couvertEnabled ?? false}
+                  disabled={busy}
+                  onChange={(e) => void patchOrderCommercial({ couvertEnabled: e.target.checked })}
+                />
+                Couvert
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  className="rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-200"
+                  value={order.couvertMode ?? "PERCENT"}
+                  disabled={busy || !order.couvertEnabled}
+                  onChange={(e) =>
+                    void patchOrderCommercial({ couvertMode: e.target.value as CommercialChargeMode })
+                  }
+                >
+                  <option value="PERCENT">Percentual</option>
+                  <option value="FIXED">Valor fixo</option>
+                </select>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="min-w-[5rem] flex-1 rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-100"
+                  disabled={busy || !order.couvertEnabled}
+                  defaultValue={String(order.couvertValue ?? 0)}
+                  key={`cv-${order.id}-${order.couvertValue}-${order.couvertMode}`}
+                  onBlur={(e) => {
+                    const n = Number.parseFloat(e.target.value.replace(",", "."));
+                    if (!Number.isFinite(n) || n < 0) {
+                      return;
+                    }
+                    if ((order.couvertMode ?? "PERCENT") === "PERCENT" && n > 100) {
+                      setError("Couvert % máximo 100.");
+                      return;
+                    }
+                    void patchOrderCommercial({ couvertValue: n });
+                  }}
+                />
+                <span className="self-center text-[10px] text-zinc-500">
+                  {(order.couvertMode ?? "PERCENT") === "PERCENT" ? "%" : "R$"}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-[#141414]/80 p-2.5">
+              <label className="flex items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={order.serviceFeeEnabled ?? false}
+                  disabled={busy}
+                  onChange={(e) => void patchOrderCommercial({ serviceFeeEnabled: e.target.checked })}
+                />
+                Taxa de serviço
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <select
+                  className="rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-200"
+                  value={order.serviceFeeMode ?? "PERCENT"}
+                  disabled={busy || !order.serviceFeeEnabled}
+                  onChange={(e) =>
+                    void patchOrderCommercial({ serviceFeeMode: e.target.value as CommercialChargeMode })
+                  }
+                >
+                  <option value="PERCENT">Percentual</option>
+                  <option value="FIXED">Valor fixo</option>
+                </select>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="min-w-[5rem] flex-1 rounded border border-white/10 bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-zinc-100"
+                  disabled={busy || !order.serviceFeeEnabled}
+                  defaultValue={String(order.serviceFeeValue ?? 0)}
+                  key={`sv-${order.id}-${order.serviceFeeValue}-${order.serviceFeeMode}`}
+                  onBlur={(e) => {
+                    const n = Number.parseFloat(e.target.value.replace(",", "."));
+                    if (!Number.isFinite(n) || n < 0) {
+                      return;
+                    }
+                    if ((order.serviceFeeMode ?? "PERCENT") === "PERCENT" && n > 100) {
+                      setError("Taxa % máximo 100.");
+                      return;
+                    }
+                    void patchOrderCommercial({ serviceFeeValue: n });
+                  }}
+                />
+                <span className="self-center text-[10px] text-zinc-500">
+                  {(order.serviceFeeMode ?? "PERCENT") === "PERCENT" ? "%" : "R$"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="border-t border-white/[0.08] bg-[#141414]/80 px-4 py-4">
         {order && step === "selling" ? (
           <>
+            {((order.couvertAmount ?? 0) > 0.001 || (order.serviceFeeAmount ?? 0) > 0.001) && (
+              <div className="mb-3 space-y-1 text-[11px] text-zinc-500">
+                <div className="flex justify-between gap-2">
+                  <span>Subtotal (itens)</span>
+                  <span className="tabular-nums text-zinc-400">{money.format(order.subtotal)}</span>
+                </div>
+                {(order.couvertAmount ?? 0) > 0.001 ? (
+                  <div className="flex justify-between gap-2">
+                    <span>Couvert</span>
+                    <span className="tabular-nums text-zinc-400">{money.format(order.couvertAmount ?? 0)}</span>
+                  </div>
+                ) : null}
+                {(order.serviceFeeAmount ?? 0) > 0.001 ? (
+                  <div className="flex justify-between gap-2">
+                    <span>Taxa de serviço</span>
+                    <span className="tabular-nums text-zinc-400">{money.format(order.serviceFeeAmount ?? 0)}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-sm text-zinc-500">Total</span>
-              <span className="text-2xl font-bold tabular-nums text-amber-200/95">{money.format(order.subtotal)}</span>
+              <span className="text-sm text-zinc-500">Total a pagar</span>
+              <span className="text-2xl font-bold tabular-nums text-amber-200/95">
+                {money.format(order.totalDue ?? order.subtotal)}
+              </span>
             </div>
             <Button type="button" className="mt-4 w-full" disabled={busy} onClick={openCheckout}>
               {order.kind === "DIRECT" ? "Finalizar venda" : "Encerrar comanda"}
@@ -867,7 +1016,7 @@ export function PdvScreen({
                       onClick={() => void resumeComanda(o)}
                       disabled={busy}
                     >
-                      {o.customer?.name ?? o.clientName ?? "Sem nome"} · {money.format(o.subtotal)}
+                      {o.customer?.name ?? o.clientName ?? "Sem nome"} · {money.format(o.totalDue ?? o.subtotal)}
                     </button>
                   </li>
                 ))}
@@ -888,7 +1037,7 @@ export function PdvScreen({
                   >
                     <span className="text-zinc-400">
                       {o.kind === "DIRECT" ? "Balcão" : "Comanda"}{" "}
-                      {o.customer?.name ?? o.clientName ?? "—"} · {money.format(o.subtotal)}
+                      {o.customer?.name ?? o.clientName ?? "—"} · {money.format(o.totalDue ?? o.subtotal)}
                     </span>
                     <span className="flex flex-wrap gap-1">
                       <Button
@@ -1018,7 +1167,10 @@ export function PdvScreen({
 
       <CheckoutModal
         open={checkoutOpen}
-        subtotal={order?.subtotal ?? 0}
+        totalDue={order ? (order.totalDue ?? order.subtotal) : 0}
+        itemsSubtotal={order?.subtotal}
+        couvertAmount={order?.couvertAmount}
+        serviceFeeAmount={order?.serviceFeeAmount}
         methods={paymentMethods}
         busy={busy}
         onClose={() => setCheckoutOpen(false)}

@@ -1,5 +1,6 @@
 import { Router } from "express";
-import type { OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
+import type { CommercialChargeMode, OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
+import { computeCommercialAmounts } from "../lib/orderCommercial.js";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyJwtToPayload } from "../middleware/auth.js";
 import { requireOpenCashRegister, requirePdvAccess } from "../middleware/pdvAccess.js";
@@ -65,6 +66,14 @@ const productSelect = {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+const CHARGE_MODES: CommercialChargeMode[] = ["PERCENT", "FIXED"];
+
+function parseChargeMode(raw: unknown): CommercialChargeMode | undefined {
+  return typeof raw === "string" && CHARGE_MODES.includes(raw as CommercialChargeMode)
+    ? (raw as CommercialChargeMode)
+    : undefined;
 }
 
 pdvRouter.get("/products", async (req, res) => {
@@ -154,6 +163,12 @@ async function serializeOrder(
     createdById: string;
     createdBy: { id: string; name: string; login: string };
     closedBy: { id: string; name: string; login: string } | null;
+    couvertEnabled: boolean;
+    couvertMode: CommercialChargeMode;
+    couvertValue: number;
+    serviceFeeEnabled: boolean;
+    serviceFeeMode: CommercialChargeMode;
+    serviceFeeValue: number;
     items: {
       id: string;
       productId: string;
@@ -222,7 +237,15 @@ async function serializeOrder(
       maxQuantity,
     };
   });
-  const subtotal = round2(items.reduce((s, i) => s + i.lineTotal, 0));
+  const itemsSubtotal = round2(items.reduce((s, i) => s + i.lineTotal, 0));
+  const comm = computeCommercialAmounts(itemsSubtotal, {
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
+  });
 
   let paymentsOut: SerializedPayment[] | undefined;
   if (order.payments && order.payments.length > 0) {
@@ -255,7 +278,16 @@ async function serializeOrder(
     createdBy: order.createdBy,
     closedBy: order.closedBy,
     items,
-    subtotal,
+    subtotal: itemsSubtotal,
+    couvertAmount: comm.couvertAmount,
+    serviceFeeAmount: comm.serviceFeeAmount,
+    totalDue: comm.totalDue,
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
     payments: paymentsOut,
     canReopen: extra?.canReopen,
   };
@@ -535,12 +567,22 @@ pdvRouter.post("/orders", requireOpenCashRegister, async (req, res) => {
     customerId = cust.id;
   }
 
+  const settings =
+    (await prisma.commercialSettings.findUnique({ where: { id: "default" } })) ??
+    (await prisma.commercialSettings.create({ data: { id: "default" } }));
+
   const created = await prisma.order.create({
     data: {
       kind,
       clientName,
       customerId,
       createdById: req.user!.sub,
+      couvertEnabled: settings.couvertEnabled,
+      couvertMode: settings.couvertMode,
+      couvertValue: settings.couvertValue,
+      serviceFeeEnabled: settings.serviceFeeEnabled,
+      serviceFeeMode: settings.serviceFeeMode,
+      serviceFeeValue: settings.serviceFeeValue,
     },
     include: orderInclude,
   });
@@ -577,6 +619,63 @@ pdvRouter.patch("/orders/:id", requireOpenCashRegister, async (req, res) => {
       }
       data.customer = { connect: { id: cust.id } };
     }
+  }
+
+  if (typeof req.body?.couvertEnabled === "boolean") {
+    data.couvertEnabled = req.body.couvertEnabled;
+  }
+  if (req.body?.couvertMode !== undefined) {
+    const m = parseChargeMode(req.body.couvertMode);
+    if (!m) {
+      res.status(400).json({ error: "couvertMode inválido (PERCENT ou FIXED)." });
+      return;
+    }
+    data.couvertMode = m;
+  }
+  if (req.body?.couvertValue !== undefined) {
+    const n =
+      typeof req.body.couvertValue === "number"
+        ? req.body.couvertValue
+        : Number.parseFloat(String(req.body.couvertValue).replace(",", "."));
+    if (!Number.isFinite(n) || n < 0) {
+      res.status(400).json({ error: "couvertValue inválido." });
+      return;
+    }
+    const mode = (req.body?.couvertMode !== undefined ? parseChargeMode(req.body.couvertMode) : null) ?? order.couvertMode;
+    if (mode === "PERCENT" && n > 100) {
+      res.status(400).json({ error: "Couvert em % não pode exceder 100." });
+      return;
+    }
+    data.couvertValue = round2(n);
+  }
+
+  if (typeof req.body?.serviceFeeEnabled === "boolean") {
+    data.serviceFeeEnabled = req.body.serviceFeeEnabled;
+  }
+  if (req.body?.serviceFeeMode !== undefined) {
+    const m = parseChargeMode(req.body.serviceFeeMode);
+    if (!m) {
+      res.status(400).json({ error: "serviceFeeMode inválido (PERCENT ou FIXED)." });
+      return;
+    }
+    data.serviceFeeMode = m;
+  }
+  if (req.body?.serviceFeeValue !== undefined) {
+    const n =
+      typeof req.body.serviceFeeValue === "number"
+        ? req.body.serviceFeeValue
+        : Number.parseFloat(String(req.body.serviceFeeValue).replace(",", "."));
+    if (!Number.isFinite(n) || n < 0) {
+      res.status(400).json({ error: "serviceFeeValue inválido." });
+      return;
+    }
+    const mode =
+      (req.body?.serviceFeeMode !== undefined ? parseChargeMode(req.body.serviceFeeMode) : null) ?? order.serviceFeeMode;
+    if (mode === "PERCENT" && n > 100) {
+      res.status(400).json({ error: "Taxa de serviço em % não pode exceder 100." });
+      return;
+    }
+    data.serviceFeeValue = round2(n);
   }
 
   if (Object.keys(data).length === 0) {
@@ -791,12 +890,20 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
     return;
   }
 
-  const subtotal = round2(
+  const itemsSubtotal = round2(
     order.items.reduce((s, it) => s + round2(it.quantity * it.unitPrice), 0),
   );
+  const { totalDue } = computeCommercialAmounts(itemsSubtotal, {
+    couvertEnabled: order.couvertEnabled,
+    couvertMode: order.couvertMode,
+    couvertValue: order.couvertValue,
+    serviceFeeEnabled: order.serviceFeeEnabled,
+    serviceFeeMode: order.serviceFeeMode,
+    serviceFeeValue: order.serviceFeeValue,
+  });
 
   const paymentsRaw = req.body?.payments as PaymentLineInput[] | undefined;
-  if (subtotal > 0 && (!Array.isArray(paymentsRaw) || paymentsRaw.length === 0)) {
+  if (totalDue > 0.001 && (!Array.isArray(paymentsRaw) || paymentsRaw.length === 0)) {
     res.status(400).json({ error: "Informe as formas de pagamento." });
     return;
   }
@@ -809,7 +916,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
 
   const closedById = req.user!.sub;
 
-  if (subtotal <= 0) {
+  if (totalDue <= 0.001) {
     const closed = await prisma.$transaction(async (tx) => {
       await decrementStockTx(tx, orderId);
       return tx.order.update({
@@ -893,9 +1000,9 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
     });
   }
 
-  if (Math.abs(sumPaid - subtotal) > 0.02) {
+  if (Math.abs(sumPaid - totalDue) > 0.02) {
     res.status(400).json({
-      error: `Total pago (${sumPaid.toFixed(2)}) deve ser igual ao pedido (${subtotal.toFixed(2)}).`,
+      error: `Total pago (${sumPaid.toFixed(2)}) deve ser igual ao pedido (${totalDue.toFixed(2)}).`,
     });
     return;
   }

@@ -303,7 +303,7 @@ export function CustomersScreen() {
                     <thead className="sticky top-0 bg-[#1a1a1a]">
                       <tr className="border-b border-white/[0.08] text-left text-[11px] uppercase text-zinc-500">
                         <th className="px-3 py-2">Fechamento</th>
-                        <th className="px-3 py-2">Subtotal</th>
+                        <th className="px-3 py-2">Total</th>
                         <th className="px-3 py-2">Mesa / obs.</th>
                       </tr>
                     </thead>
@@ -311,7 +311,7 @@ export function CustomersScreen() {
                       {reportData.orders.map((o) => (
                         <tr key={o.id} className="border-b border-white/[0.05] hover:bg-white/[0.03]">
                           <td className="px-3 py-2 text-zinc-400">{o.closedAt ? dt.format(new Date(o.closedAt)) : "—"}</td>
-                          <td className="px-3 py-2 tabular-nums">{money.format(o.subtotal)}</td>
+                          <td className="px-3 py-2 tabular-nums">{money.format(o.totalDue)}</td>
                           <td className="px-3 py-2 text-zinc-400">{o.clientName ?? "—"}</td>
                         </tr>
                       ))}
