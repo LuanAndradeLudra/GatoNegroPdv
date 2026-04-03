@@ -340,6 +340,8 @@ export type PdvOrder = {
   cancelledAt?: string | null;
   closedCashRegisterId?: string | null;
   createdBy: { id: string; name: string; login: string };
+  /** Quem registrou o fechamento (pagamento); vendas antigas podem ser null. */
+  closedBy?: { id: string; name: string; login: string } | null;
   items: PdvOrderItem[];
   subtotal: number;
   payments?: OrderPaymentRow[];
@@ -942,7 +944,13 @@ export type FinanceCashFlowSession = {
   salesNet: number;
   salesGross: number;
   fees: number;
+  /** Vendas em dinheiro (bruto) no turno — entra no cálculo da gaveta. */
+  cashSalesGross: number;
+  /** Dinheiro esperado na gaveta: fundo de troco + suprimentos − sangrias + vendas em dinheiro. */
+  expectedDrawerCash: number;
   closingBalance: number | null;
+  /** Contado − esperado (quebra/sobra). */
+  closingVariance: number | null;
   openedBy: { id: string; name: string; login: string };
   closedBy: { id: string; name: string; login: string } | null;
 };
@@ -975,7 +983,12 @@ export type FinanceSalesOrderRow = {
 
 export type FinanceSalesSummaryResponse = {
   filter: { from: string; to: string };
+  /** Linhas retornadas na lista (máx. 2000). */
   orderCount: number;
+  /** Total de pedidos fechados no período (independente do limite da lista). */
+  totalClosedOrdersInPeriod: number;
+  /** true se há mais de 2000 pedidos no período — a lista mostra só os mais recentes. */
+  ordersTruncated: boolean;
   totalNet: number;
   totalGross: number;
   totalFees: number;
@@ -991,6 +1004,7 @@ export type FinanceSalesSummaryResponse = {
   /** Pedidos fechados no período (até 2000), mais recentes primeiro. */
   orders: FinanceSalesOrderRow[];
   averageTicket: number;
+  topProducts: { productId: string; name: string; quantitySold: number }[];
 };
 
 export async function apiFinanceSalesSummary(

@@ -57,6 +57,7 @@ function parseRange(req: { query: Record<string, unknown> }): { from: Date; to: 
 
 const financeOrderDetailInclude = {
   createdBy: { select: { id: true, name: true, login: true } },
+  closedBy: { select: { id: true, name: true, login: true } },
   customer: { select: { id: true, name: true, phone: true } },
   items: {
     include: {
@@ -85,6 +86,7 @@ function serializeFinanceClosedOrder(order: {
   cancelledAt: Date | null;
   closedCashRegisterId: string | null;
   createdBy: { id: string; name: string; login: string };
+  closedBy: { id: string; name: string; login: string } | null;
   items: {
     id: string;
     productId: string;
@@ -146,6 +148,7 @@ function serializeFinanceClosedOrder(order: {
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     closedCashRegisterId: order.closedCashRegisterId,
     createdBy: order.createdBy,
+    closedBy: order.closedBy,
     items,
     subtotal,
     payments: paymentsOut,
@@ -183,7 +186,7 @@ financeRouter.get("/cash-flow", async (req, res) => {
 
   const rows = await Promise.all(
     sessions.map(async (s) => {
-      const [sangria, suprimento, payAgg] = await Promise.all([
+      const [sangria, suprimento, payAgg, cashSalesAgg] = await Promise.all([
         prisma.cashMovement.aggregate({
           where: { cashRegisterId: s.id, type: "SANGRIA" },
           _sum: { amount: true },
@@ -201,6 +204,16 @@ financeRouter.get("/cash-flow", async (req, res) => {
           },
           _sum: { netAmount: true, amountPaid: true, feeAmount: true },
         }),
+        prisma.orderPayment.aggregate({
+          where: {
+            order: {
+              closedCashRegisterId: s.id,
+              status: "CLOSED",
+            },
+            paymentMethod: { kind: "DINHEIRO" },
+          },
+          _sum: { amountPaid: true },
+        }),
       ]);
 
       const totalSangria = round2(sangria._sum.amount ?? 0);
@@ -208,6 +221,12 @@ financeRouter.get("/cash-flow", async (req, res) => {
       const salesNet = round2(payAgg._sum.netAmount ?? 0);
       const salesGross = round2(payAgg._sum.amountPaid ?? 0);
       const fees = round2(payAgg._sum.feeAmount ?? 0);
+      const cashSalesGross = round2(cashSalesAgg._sum.amountPaid ?? 0);
+      /** Dinheiro esperado na gaveta: fundo + suprimentos − sangrias + vendas em dinheiro (bruto). */
+      const expectedDrawerCash = round2(s.initialValue + totalSuprimento - totalSangria + cashSalesGross);
+      const closingBalance = s.closingBalance != null ? round2(s.closingBalance) : null;
+      const closingVariance =
+        closingBalance != null ? round2(closingBalance - expectedDrawerCash) : null;
 
       return {
         sessionId: s.id,
@@ -221,7 +240,10 @@ financeRouter.get("/cash-flow", async (req, res) => {
         salesNet,
         salesGross,
         fees,
-        closingBalance: s.closingBalance != null ? round2(s.closingBalance) : null,
+        cashSalesGross,
+        expectedDrawerCash,
+        closingBalance,
+        closingVariance,
         openedBy: s.openedBy,
         closedBy: s.closedBy,
       };
@@ -238,11 +260,15 @@ financeRouter.get("/cash-flow", async (req, res) => {
 financeRouter.get("/sales-summary", async (req, res) => {
   const { from, to } = parseRange(req);
 
+  const closedWhere = {
+    status: "CLOSED" as const,
+    closedAt: { gte: from, lte: to },
+  };
+
+  const totalClosedOrdersInPeriod = await prisma.order.count({ where: closedWhere });
+
   const orderRows = await prisma.order.findMany({
-    where: {
-      status: "CLOSED",
-      closedAt: { gte: from, lte: to },
-    },
+    where: closedWhere,
     orderBy: { closedAt: "desc" },
     take: 2000,
     select: {
@@ -263,10 +289,41 @@ financeRouter.get("/sales-summary", async (req, res) => {
     },
   });
 
-  if (orderRows.length === 0) {
+  const groupedItems = await prisma.orderItem.groupBy({
+    by: ["productId"],
+    where: {
+      order: closedWhere,
+    },
+    _sum: { quantity: true },
+  });
+  const sortedTop = groupedItems
+    .map((g) => ({
+      productId: g.productId,
+      quantitySold: round2(g._sum.quantity ?? 0),
+    }))
+    .sort((a, b) => b.quantitySold - a.quantitySold)
+    .slice(0, 5);
+  let topProducts: { productId: string; name: string; quantitySold: number }[] = [];
+  if (sortedTop.length > 0) {
+    const ids = sortedTop.map((r) => r.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(products.map((p) => [p.id, p.name]));
+    topProducts = sortedTop.map((r) => ({
+      productId: r.productId,
+      name: nameById.get(r.productId) ?? "—",
+      quantitySold: r.quantitySold,
+    }));
+  }
+
+  if (totalClosedOrdersInPeriod === 0) {
     res.json({
       filter: { from: from.toISOString(), to: to.toISOString() },
       orderCount: 0,
+      totalClosedOrdersInPeriod: 0,
+      ordersTruncated: false,
       totalNet: 0,
       totalGross: 0,
       totalFees: 0,
@@ -274,19 +331,59 @@ financeRouter.get("/sales-summary", async (req, res) => {
       byPaymentMethod: [],
       orders: [],
       averageTicket: 0,
+      topProducts,
     });
     return;
   }
 
-  let totalNet = 0;
-  let totalGross = 0;
-  let totalFees = 0;
-  let directNet = 0;
-  let comandaNet = 0;
-  const methodMap = new Map<
-    string,
-    { paymentMethodId: string; name: string; kind: string; net: number; gross: number; fee: number }
-  >();
+  const [totalsAll, directAgg, comandaAgg, methodGroups] = await Promise.all([
+    prisma.orderPayment.aggregate({
+      where: { order: closedWhere },
+      _sum: { netAmount: true, amountPaid: true, feeAmount: true },
+    }),
+    prisma.orderPayment.aggregate({
+      where: { order: { ...closedWhere, kind: "DIRECT" } },
+      _sum: { netAmount: true },
+    }),
+    prisma.orderPayment.aggregate({
+      where: { order: { ...closedWhere, kind: "COMANDA" } },
+      _sum: { netAmount: true },
+    }),
+    prisma.orderPayment.groupBy({
+      by: ["paymentMethodId"],
+      where: { order: closedWhere },
+      _sum: { netAmount: true, amountPaid: true, feeAmount: true },
+    }),
+  ]);
+
+  const totalNet = round2(totalsAll._sum.netAmount ?? 0);
+  const totalGross = round2(totalsAll._sum.amountPaid ?? 0);
+  const totalFees = round2(totalsAll._sum.feeAmount ?? 0);
+  const directNet = round2(directAgg._sum.netAmount ?? 0);
+  const comandaNet = round2(comandaAgg._sum.netAmount ?? 0);
+
+  const pmIds = methodGroups.map((g) => g.paymentMethodId);
+  const paymentMethods =
+    pmIds.length > 0
+      ? await prisma.paymentMethod.findMany({
+          where: { id: { in: pmIds } },
+          select: { id: true, name: true, kind: true },
+        })
+      : [];
+  const pmMap = new Map(paymentMethods.map((m) => [m.id, m]));
+  const byPaymentMethod = methodGroups
+    .map((g) => {
+      const pm = pmMap.get(g.paymentMethodId);
+      return {
+        paymentMethodId: g.paymentMethodId,
+        name: pm?.name ?? "—",
+        kind: pm?.kind ?? "",
+        net: round2(g._sum.netAmount ?? 0),
+        gross: round2(g._sum.amountPaid ?? 0),
+        fee: round2(g._sum.feeAmount ?? 0),
+      };
+    })
+    .sort((a, b) => b.net - a.net);
 
   const ordersOut: {
     orderId: string;
@@ -303,36 +400,9 @@ financeRouter.get("/sales-summary", async (req, res) => {
     let oGross = 0;
     let oFee = 0;
     for (const p of o.payments) {
-      const net = round2(p.netAmount);
-      const gross = round2(p.amountPaid);
-      const fee = round2(p.feeAmount);
-      oNet += net;
-      oGross += gross;
-      oFee += fee;
-      totalNet += net;
-      totalGross += gross;
-      totalFees += fee;
-      if (o.kind === "DIRECT") {
-        directNet += net;
-      } else {
-        comandaNet += net;
-      }
-      const mid = p.paymentMethodId;
-      const cur = methodMap.get(mid);
-      if (cur) {
-        cur.net = round2(cur.net + net);
-        cur.gross = round2(cur.gross + gross);
-        cur.fee = round2(cur.fee + fee);
-      } else {
-        methodMap.set(mid, {
-          paymentMethodId: mid,
-          name: p.paymentMethod.name,
-          kind: p.paymentMethod.kind,
-          net,
-          gross,
-          fee,
-        });
-      }
+      oNet += round2(p.netAmount);
+      oGross += round2(p.amountPaid);
+      oFee += round2(p.feeAmount);
     }
     const cust = o.customer?.name?.trim();
     const cli = o.clientName?.trim();
@@ -348,23 +418,22 @@ financeRouter.get("/sales-summary", async (req, res) => {
     });
   }
 
-  totalNet = round2(totalNet);
-  totalGross = round2(totalGross);
-  totalFees = round2(totalFees);
-  directNet = round2(directNet);
-  comandaNet = round2(comandaNet);
-
-  const byPaymentMethod = Array.from(methodMap.values()).sort((a, b) => b.net - a.net);
+  const ordersTruncated = totalClosedOrdersInPeriod > 2000;
+  const averageTicket =
+    totalClosedOrdersInPeriod > 0 ? round2(totalNet / totalClosedOrdersInPeriod) : 0;
 
   res.json({
     filter: { from: from.toISOString(), to: to.toISOString() },
     orderCount: orderRows.length,
+    totalClosedOrdersInPeriod,
+    ordersTruncated,
     totalNet,
     totalGross,
     totalFees,
     byKind: { DIRECT: directNet, COMANDA: comandaNet },
     byPaymentMethod,
     orders: ordersOut,
-    averageTicket: orderRows.length > 0 ? round2(totalNet / orderRows.length) : 0,
+    averageTicket,
+    topProducts,
   });
 });

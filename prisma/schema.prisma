@@ -31,6 +31,7 @@ model User {
   cashRegistersClosed CashRegister[] @relation("CashClosedBy")
   cashMovements       CashMovement[] @relation("CashMovementCreatedBy")
   ordersCreated       Order[]         @relation("OrderCreatedBy")
+  ordersClosed        Order[]         @relation("OrderClosedBy")
   stockMovements      StockMovement[] @relation("StockMovementCreatedBy")
 }
 
@@ -132,6 +133,9 @@ model Order {
   /// Turno de caixa em que o pedido foi fechado (reabrir só se o mesmo caixa ainda estiver aberto).
   closedCashRegisterId String?
   closedCashRegister   CashRegister? @relation("OrderClosedInCash", fields: [closedCashRegisterId], references: [id], onDelete: SetNull)
+  /// Operador que registrou o fechamento da venda (pagamento).
+  closedById  String?
+  closedBy    User?       @relation("OrderClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   createdById String
   createdBy   User        @relation("OrderCreatedBy", fields: [createdById], references: [id])
   items       OrderItem[]

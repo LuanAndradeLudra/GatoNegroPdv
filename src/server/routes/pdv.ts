@@ -106,6 +106,7 @@ pdvRouter.get("/products", async (req, res) => {
 
 const orderInclude = {
   createdBy: { select: { id: true, name: true, login: true } },
+  closedBy: { select: { id: true, name: true, login: true } },
   customer: { select: { id: true, name: true, phone: true } },
   items: {
     include: {
@@ -149,8 +150,10 @@ async function serializeOrder(
     lastActivityAt?: Date | null;
     cancelledAt: Date | null;
     closedCashRegisterId: string | null;
+    closedById: string | null;
     createdById: string;
     createdBy: { id: string; name: string; login: string };
+    closedBy: { id: string; name: string; login: string } | null;
     items: {
       id: string;
       productId: string;
@@ -250,6 +253,7 @@ async function serializeOrder(
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     closedCashRegisterId: order.closedCashRegisterId,
     createdBy: order.createdBy,
+    closedBy: order.closedBy,
     items,
     subtotal,
     payments: paymentsOut,
@@ -803,6 +807,8 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
     return;
   }
 
+  const closedById = req.user!.sub;
+
   if (subtotal <= 0) {
     const closed = await prisma.$transaction(async (tx) => {
       await decrementStockTx(tx, orderId);
@@ -812,6 +818,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
           status: "CLOSED",
           closedAt: new Date(),
           closedCashRegisterId: cashId,
+          closedById,
         },
         include: orderIncludeWithPayments,
       });
@@ -914,6 +921,7 @@ pdvRouter.post("/orders/:id/close", requireOpenCashRegister, async (req, res) =>
           status: "CLOSED",
           closedAt: new Date(),
           closedCashRegisterId: cashId,
+          closedById,
         },
         include: orderIncludeWithPayments,
       });
@@ -954,6 +962,7 @@ pdvRouter.post("/orders/:id/reopen", requireOpenCashRegister, async (req, res) =
           status: "OPEN",
           closedAt: null,
           closedCashRegisterId: null,
+          closedById: null,
         },
         include: orderInclude,
       });

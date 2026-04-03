@@ -140,11 +140,19 @@ export function ClosedOrderReportModal({
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-[11px] uppercase text-zinc-500">Operador</dt>
+                <dt className="text-[11px] uppercase text-zinc-500">Aberto por</dt>
                 <dd className="text-right text-zinc-300">
                   {data.createdBy.name} ({data.createdBy.login})
                 </dd>
               </div>
+              {data.status === "CLOSED" ? (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[11px] uppercase text-zinc-500">Fechado por</dt>
+                  <dd className="text-right text-zinc-300">
+                    {data.closedBy ? `${data.closedBy.name} (${data.closedBy.login})` : "—"}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-2 border-t border-white/[0.06] pt-2">
                 <dt className="text-[11px] uppercase text-zinc-500">Subtotal itens</dt>
                 <dd className="text-right text-lg font-semibold tabular-nums text-amber-200/95">
