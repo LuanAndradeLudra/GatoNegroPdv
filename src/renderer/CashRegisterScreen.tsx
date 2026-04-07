@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { ArrowDownCircle, ArrowUpCircle, Banknote, PanelRightOpen } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CreditCard, PanelRightOpen } from "lucide-react";
 import {
   apiCashAddMovement,
   apiCashClose,
@@ -7,9 +7,12 @@ import {
   apiCashHistory,
   apiCashMovements,
   apiCashOpen,
+  apiCashOpenSessionSales,
   type CashMovementRow,
+  type CashOpenSessionSales,
   type CashSession,
   type CashShift,
+  type PaymentMethodKind,
   type User,
 } from "./api";
 import { CashSessionDetailModal } from "./components/CashSessionDetailModal";
@@ -68,6 +71,13 @@ function shiftLabel(s: CashSession): string {
   return m[s.shift] ?? s.shift;
 }
 
+const PAYMENT_KIND_LABEL: Record<PaymentMethodKind, string> = {
+  DINHEIRO: "Dinheiro",
+  DEBITO: "Débito",
+  CREDITO: "Crédito",
+  VALE: "Vale / outro",
+};
+
 export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () => void }) {
   const { state } = useAuth();
   const token = state.status === "authenticated" ? state.token : null;
@@ -76,6 +86,7 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
   const [current, setCurrent] = useState<CashSession | null | undefined>(undefined);
   const [history, setHistory] = useState<CashSession[]>([]);
   const [movements, setMovements] = useState<CashMovementRow[]>([]);
+  const [sessionSales, setSessionSales] = useState<CashOpenSessionSales | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -105,15 +116,18 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
       setCurrent(c);
       setHistory(h);
       if (c) {
-        const m = await apiCashMovements(token);
+        const [m, sales] = await Promise.all([apiCashMovements(token), apiCashOpenSessionSales(token)]);
         setMovements(m);
+        setSessionSales(sales);
       } else {
         setMovements([]);
+        setSessionSales(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar caixa");
       setCurrent(null);
       setMovements([]);
+      setSessionSales(null);
     }
   }, [token]);
 
@@ -406,6 +420,91 @@ export function CashRegisterScreen({ onSessionChange }: { onSessionChange?: () =
                         </li>
                       ))}
                     </ul>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {sessionSales && current ? (
+                <Card className="border-amber-200/80 dark:border-amber-900/40">
+                  <CardHeader className="!py-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <CreditCard className="h-5 w-5 text-amber-600 dark:text-amber-400" strokeWidth={1.75} />
+                      Vendas do turno (conferência)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="!pt-0 mt-2 space-y-4 text-sm">
+                    <p className={cn("text-xs leading-relaxed", muted)}>
+                      Totais das vendas já finalizadas neste caixa, somando o valor bruto informado em cada parcela no PDV. Útil para
+                      bater com maquininhas, conferência de dinheiro e fechamento.
+                    </p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50/90 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/60">
+                      <p className="text-slate-700 dark:text-zinc-300">
+                        <span className={labelUpper}>Pedidos fechados</span>
+                        <span className="ml-2 font-semibold tabular-nums text-slate-900 dark:text-zinc-100">
+                          {sessionSales.ordersClosedCount}
+                        </span>
+                      </p>
+                      <p className="text-slate-700 dark:text-zinc-300">
+                        <span className={labelUpper}>Parcelas registradas</span>
+                        <span className="ml-2 font-semibold tabular-nums text-slate-900 dark:text-zinc-100">
+                          {sessionSales.paymentLinesCount}
+                        </span>
+                      </p>
+                      <p className="text-slate-700 dark:text-zinc-300">
+                        <span className={labelUpper}>Total vendido</span>
+                        <span className="ml-2 font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                          {money.format(sessionSales.totalAmount)}
+                        </span>
+                      </p>
+                    </div>
+                    {sessionSales.byMethod.length === 0 ? (
+                      <p className={cn("rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-sm", muted)}>
+                        Nenhuma venda fechada neste turno ainda.
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-zinc-700">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400">
+                              <th className="px-3 py-2">Forma de pagamento</th>
+                              <th className="px-3 py-2">Tipo</th>
+                              <th className="px-3 py-2 text-right">Parcelas</th>
+                              <th className="px-3 py-2 text-right">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sessionSales.byMethod.map((row) => (
+                              <tr
+                                key={row.paymentMethodId}
+                                className="border-b border-slate-100 last:border-0 dark:border-zinc-800/80"
+                              >
+                                <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-zinc-100">{row.name}</td>
+                                <td className={cn("px-3 py-2.5", muted)}>{PAYMENT_KIND_LABEL[row.kind] ?? row.kind}</td>
+                                <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-zinc-400">
+                                  {row.linesCount}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-slate-900 dark:text-zinc-100">
+                                  {money.format(row.totalAmount)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-amber-50/80 font-semibold dark:bg-amber-950/25">
+                              <td className="px-3 py-2.5 text-slate-800 dark:text-zinc-200" colSpan={2}>
+                                Total
+                              </td>
+                              <td className="px-3 py-2.5 text-right tabular-nums text-slate-700 dark:text-zinc-300">
+                                {sessionSales.paymentLinesCount}
+                              </td>
+                              <td className="px-3 py-2.5 text-right tabular-nums text-amber-800 dark:text-amber-200">
+                                {money.format(sessionSales.totalAmount)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ) : null}

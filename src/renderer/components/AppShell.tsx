@@ -145,7 +145,7 @@ export function AppShell({
       >
         <div className="flex h-[57px] shrink-0 items-center gap-3 border-b border-slate-200/80 px-4 dark:border-zinc-800">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-900 ring-1 ring-slate-900/10 dark:bg-zinc-950 dark:ring-zinc-700">
-            <img src="/logo.jpg" alt="" className="h-full w-full object-cover" width={40} height={40} />
+            <img src="https://scontent.fsdu11-1.fna.fbcdn.net/v/t39.30808-6/326474914_507312491547613_2067051569897241797_n.jpg?_nc_cat=106&ccb=1-7&_nc_sid=1d70fc&_nc_ohc=u6Udw5VlPSwQ7kNvwFmCWfb&_nc_oc=AdrAmGot1PMOX1dXZoVE5w93s5-mlDj1rhiow5FVSNpknssYuTqhCgGjCSpmVvBQpTM&_nc_zt=23&_nc_ht=scontent.fsdu11-1.fna&_nc_gid=rPBB7uuokUmVGvjNqnmlEQ&_nc_ss=7a3a8&oh=00_Af0PnYdzW-biyTu59q6LlAyJmITMarlST1g4DrGQDyd4UA&oe=69DB2B53" alt="" className="h-full w-full object-cover" width={40} height={40} />
           </div>
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate text-[15px] font-bold tracking-tight text-slate-900 dark:text-zinc-50">Gato Negro</p>

@@ -44,6 +44,7 @@ kitchenRouter.get("/board", requireKitchenView, async (_req, res) => {
       minutesWaiting: minutesSince(r.order.openedAt),
       productName: r.product.name,
       quantity: r.quantity,
+      note: r.note?.trim() || null,
       kitchenStatus: r.kitchenStatus as KitchenItemStatus,
     }));
 
@@ -120,7 +121,42 @@ kitchenRouter.patch("/items/:itemId/status", requireKitchenUpdate, async (req, r
       minutesWaiting: minutesSince(updated.order.openedAt),
       productName: updated.product.name,
       quantity: updated.quantity,
+      note: updated.note?.trim() || null,
       kitchenStatus: updated.kitchenStatus,
     },
   });
+});
+
+/** Retira o item da fila da cozinha após pronto (entregue ao salão / cliente). */
+kitchenRouter.post("/items/:itemId/pickup", requireKitchenUpdate, async (req, res) => {
+  const itemId = req.params.itemId;
+  const item = await prisma.orderItem.findUnique({
+    where: { id: itemId },
+    include: {
+      order: true,
+      product: { select: { isKitchenItem: true } },
+    },
+  });
+
+  if (!item || !item.product.isKitchenItem || item.kitchenStatus == null) {
+    res.status(404).json({ error: "Item não encontrado na cozinha." });
+    return;
+  }
+
+  if (item.order.status !== "OPEN") {
+    res.status(409).json({ error: "Pedido já encerrado." });
+    return;
+  }
+
+  if (item.kitchenStatus !== "READY") {
+    res.status(409).json({ error: "Só é possível entregar itens marcados como prontos." });
+    return;
+  }
+
+  await prisma.orderItem.update({
+    where: { id: itemId },
+    data: { kitchenStatus: null },
+  });
+
+  res.status(204).end();
 });

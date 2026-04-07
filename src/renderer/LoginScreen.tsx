@@ -37,7 +37,7 @@ export function LoginScreen() {
         <div className="mb-10 text-center">
           {/* Ícone ou Logo sutil */}
           <div className="mx-auto mb-4 flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl bg-slate-900 shadow-lg ring-1 ring-slate-900/10 dark:bg-zinc-950 dark:ring-zinc-700">
-            <img src="/logo.jpg" alt="Logo" width={82} height={82} className="h-full w-full object-cover" />
+            <img src="https://scontent.fsdu11-1.fna.fbcdn.net/v/t39.30808-6/326474914_507312491547613_2067051569897241797_n.jpg?_nc_cat=106&ccb=1-7&_nc_sid=1d70fc&_nc_ohc=u6Udw5VlPSwQ7kNvwFmCWfb&_nc_oc=AdrAmGot1PMOX1dXZoVE5w93s5-mlDj1rhiow5FVSNpknssYuTqhCgGjCSpmVvBQpTM&_nc_zt=23&_nc_ht=scontent.fsdu11-1.fna&_nc_gid=rPBB7uuokUmVGvjNqnmlEQ&_nc_ss=7a3a8&oh=00_Af0PnYdzW-biyTu59q6LlAyJmITMarlST1g4DrGQDyd4UA&oe=69DB2B53" alt="Logo" width={82} height={82} className="h-full w-full object-cover" />
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-zinc-50">Bem-vindo de volta</h1>

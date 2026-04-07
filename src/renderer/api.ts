@@ -205,6 +205,24 @@ export type CashMovementRow = {
   createdBy: CashOperator;
 };
 
+/** Resumo de vendas já fechadas no turno de caixa aberto (por forma de pagamento). */
+export type CashOpenSessionSalesRow = {
+  paymentMethodId: string;
+  name: string;
+  kind: PaymentMethodKind;
+  totalAmount: number;
+  linesCount: number;
+};
+
+export type CashOpenSessionSales = {
+  sessionId: string | null;
+  openedAt: string | null;
+  ordersClosedCount: number;
+  paymentLinesCount: number;
+  totalAmount: number;
+  byMethod: CashOpenSessionSalesRow[];
+};
+
 /** Indica se há turno de caixa aberto (sem valores; serve para PDV/cozinha). */
 export async function apiCashOpenStatus(token: string): Promise<boolean> {
   const res = await fetch("/api/cash-register/open-status", { headers: authHeaders(token) });
@@ -261,6 +279,11 @@ export async function apiCashMovements(token: string): Promise<CashMovementRow[]
   return data.movements;
 }
 
+export async function apiCashOpenSessionSales(token: string): Promise<CashOpenSessionSales> {
+  const res = await fetch("/api/cash-register/open-session-sales", { headers: authHeaders(token) });
+  return parseJson<CashOpenSessionSales>(res);
+}
+
 export async function apiCashAddMovement(
   token: string,
   body: { type: "SANGRIA" | "SUPRIMENTO"; amount: number; note?: string | null },
@@ -296,6 +319,7 @@ export type PdvProduct = {
   active: boolean;
   /** Com `orderId` na listagem: quanto ainda pode ir neste pedido (estoque físico − outras comandas abertas). */
   availableForOrder: number | null;
+  category: { id: string; name: string } | null;
 };
 
 export type PdvOrderItem = {
@@ -762,6 +786,8 @@ export type KitchenBoardItem = {
   minutesWaiting: number;
   productName: string;
   quantity: number;
+  /** Observação da linha (ex.: sem cebola). */
+  note: string | null;
   kitchenStatus: "PENDING" | "QUEUE" | "PREPARING" | "READY";
 };
 
@@ -781,6 +807,28 @@ export async function apiKitchenSetStatus(
     body: JSON.stringify({ status }),
   });
   return parseJson(res);
+}
+
+/** Marca item pronto como entregue — some da cozinha. */
+export async function apiKitchenPickup(token: string, itemId: string): Promise<void> {
+  const res = await fetch(`/api/kitchen/items/${encodeURIComponent(itemId)}/pickup`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  if (res.ok && (res.status === 204 || res.status === 200)) {
+    return;
+  }
+  const text = await res.text();
+  let msg = `Erro ${res.status}`;
+  try {
+    const j = JSON.parse(text) as { error?: string };
+    if (j.error) {
+      msg = j.error;
+    }
+  } catch {
+    /* ignore */
+  }
+  throw new Error(msg);
 }
 
 export type ErpProductRow = {
@@ -1017,9 +1065,21 @@ export type FinanceCashFlowSession = {
   closedBy: { id: string; name: string; login: string } | null;
 };
 
+export type FinanceOperationalExpense = {
+  id: string;
+  spentAt: string;
+  amount: number;
+  description: string;
+  notes: string | null;
+  createdAt: string;
+  createdBy: { id: string; name: string; login: string };
+};
+
 export type FinanceCashFlowResponse = {
   filter: { from: string; to: string };
   sessions: FinanceCashFlowSession[];
+  operationalExpenses: FinanceOperationalExpense[];
+  operationalExpensesTotal: number;
 };
 
 export async function apiFinanceCashFlow(
@@ -1067,6 +1127,9 @@ export type FinanceSalesSummaryResponse = {
   orders: FinanceSalesOrderRow[];
   averageTicket: number;
   topProducts: { productId: string; name: string; quantitySold: number }[];
+  /** Despesas operacionais lançadas no financeiro (mesmo período). */
+  operationalExpensesTotal: number;
+  operationalExpenseCount: number;
 };
 
 export async function apiFinanceSalesSummary(
@@ -1078,6 +1141,55 @@ export async function apiFinanceSalesSummary(
     headers: authHeaders(token),
   });
   return parseJson(res);
+}
+
+export type FinanceExpensesListResponse = {
+  filter: { from: string; to: string };
+  expenses: FinanceOperationalExpense[];
+  total: number;
+};
+
+export async function apiFinanceExpenses(
+  token: string,
+  q: { from: string; to: string },
+): Promise<FinanceExpensesListResponse> {
+  const params = new URLSearchParams({ from: q.from, to: q.to });
+  const res = await fetch(`/api/finance/expenses?${params.toString()}`, { headers: authHeaders(token) });
+  return parseJson(res);
+}
+
+export async function apiFinanceCreateExpense(
+  token: string,
+  body: { amount: number; description: string; notes?: string | null; spentAt?: string | null },
+): Promise<FinanceOperationalExpense> {
+  const res = await fetch("/api/finance/expenses", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ expense: FinanceOperationalExpense }>(res);
+  return data.expense;
+}
+
+export async function apiFinanceDeleteExpense(token: string, id: string): Promise<void> {
+  const res = await fetch(`/api/finance/expenses/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (res.ok && (res.status === 204 || res.status === 200)) {
+    return;
+  }
+  const text = await res.text();
+  let msg = `Erro ${res.status}`;
+  try {
+    const j = JSON.parse(text) as { error?: string };
+    if (j.error) {
+      msg = j.error;
+    }
+  } catch {
+    /* ignore */
+  }
+  throw new Error(msg);
 }
 
 /** Relatório completo de um pedido fechado (Financeiro; não exige acesso ao PDV). */

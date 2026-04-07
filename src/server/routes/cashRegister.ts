@@ -195,6 +195,95 @@ cashRegisterRouter.get("/movements", requireCashRegisterView, async (_req, res) 
   });
 });
 
+/** Totais de vendas fechadas no turno aberto, por forma de pagamento (conferência no fechamento). */
+cashRegisterRouter.get("/open-session-sales", requireCashRegisterView, async (_req, res) => {
+  const open = await prisma.cashRegister.findFirst({
+    where: { closedAt: null },
+    orderBy: { openedAt: "desc" },
+    select: { id: true, openedAt: true },
+  });
+
+  if (!open) {
+    res.json({
+      sessionId: null,
+      openedAt: null,
+      ordersClosedCount: 0,
+      paymentLinesCount: 0,
+      totalAmount: 0,
+      byMethod: [] as {
+        paymentMethodId: string;
+        name: string;
+        kind: string;
+        totalAmount: number;
+        linesCount: number;
+      }[],
+    });
+    return;
+  }
+
+  const closedInSession = {
+    closedCashRegisterId: open.id,
+    status: "CLOSED" as const,
+  };
+
+  const [ordersClosedCount, grouped] = await Promise.all([
+    prisma.order.count({ where: closedInSession }),
+    prisma.orderPayment.groupBy({
+      by: ["paymentMethodId"],
+      where: { order: closedInSession },
+      _sum: { amountPaid: true },
+      _count: true,
+    }),
+  ]);
+
+  const methodIds = grouped.map((g) => g.paymentMethodId);
+  const methods =
+    methodIds.length === 0
+      ? []
+      : await prisma.paymentMethod.findMany({
+          where: { id: { in: methodIds } },
+          select: { id: true, name: true, kind: true },
+        });
+  const methodMap = new Map(methods.map((m) => [m.id, m]));
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const kindRank = (k: string) =>
+    k === "DINHEIRO" ? 0 : k === "DEBITO" ? 1 : k === "CREDITO" ? 2 : 3;
+
+  const byMethod = grouped
+    .map((g) => {
+      const pm = methodMap.get(g.paymentMethodId);
+      const total = g._sum.amountPaid ?? 0;
+      return {
+        paymentMethodId: g.paymentMethodId,
+        name: pm?.name ?? "—",
+        kind: pm?.kind ?? "VALE",
+        totalAmount: round2(total),
+        linesCount: g._count,
+      };
+    })
+    .sort((a, b) => {
+      const ko = kindRank(a.kind) - kindRank(b.kind);
+      if (ko !== 0) {
+        return ko;
+      }
+      return a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
+    });
+
+  const totalAmount = round2(byMethod.reduce((s, r) => s + r.totalAmount, 0));
+  const paymentLinesCount = grouped.reduce((s, g) => s + g._count, 0);
+
+  res.json({
+    sessionId: open.id,
+    openedAt: open.openedAt.toISOString(),
+    ordersClosedCount,
+    paymentLinesCount,
+    totalAmount,
+    byMethod,
+  });
+});
+
 cashRegisterRouter.post("/movements", requireVendasAction("abrir"), async (req, res) => {
   const open = await prisma.cashRegister.findFirst({
     where: { closedAt: null },

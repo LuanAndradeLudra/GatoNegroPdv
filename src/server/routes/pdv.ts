@@ -1,5 +1,11 @@
 import { Router } from "express";
-import type { CommercialChargeMode, OrderKind, OrderStatus, PaymentMethodKind, Prisma } from "@prisma/client";
+import {
+  Prisma,
+  type CommercialChargeMode,
+  type OrderKind,
+  type OrderStatus,
+  type PaymentMethodKind,
+} from "@prisma/client";
 import { computeCommercialAmounts } from "../lib/orderCommercial.js";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, verifyJwtToPayload } from "../middleware/auth.js";
@@ -62,6 +68,7 @@ const productSelect = {
   isKitchenItem: true,
   controlsStock: true,
   active: true,
+  category: { select: { id: true, name: true } },
 } as const;
 
 function round2(n: number): number {
@@ -106,7 +113,15 @@ pdvRouter.get("/products", async (req, res) => {
 
   res.json({
     products: rows.map((r) => ({
-      ...r,
+      id: r.id,
+      name: r.name,
+      price: r.price,
+      stock: r.stock,
+      minStock: r.minStock,
+      isKitchenItem: r.isKitchenItem,
+      controlsStock: r.controlsStock,
+      active: r.active,
+      category: r.category ? { id: r.category.id, name: r.category.name } : null,
       availableForOrder:
         orderId && r.controlsStock ? round2(r.stock - (reservedMap.get(r.id) ?? 0)) : null,
     })),
@@ -486,8 +501,8 @@ pdvRouter.get("/orders", async (req, res) => {
   }
   if (search) {
     where.OR = [
-      { clientName: { contains: search } },
-      { customer: { name: { contains: search } } },
+      { clientName: { contains: search, mode: Prisma.QueryMode.insensitive } },
+      { customer: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
     ];
   }
   if (closedFromRaw) {

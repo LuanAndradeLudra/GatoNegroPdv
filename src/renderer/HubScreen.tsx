@@ -19,6 +19,8 @@ export function HubScreen() {
   const [view, setView] = useState<ShellView>("home");
   const [cashOpen, setCashOpen] = useState<boolean | null>(null);
   const [pdvBoot, setPdvBoot] = useState<PdvBootPayload | null>(null);
+  /** Incrementado ao escolher PDV no menu — remonta o PDV e volta ao menu inicial (ex.: sair de uma comanda aberta). */
+  const [pdvShellKey, setPdvShellKey] = useState(0);
 
   const user = state.status === "authenticated" ? state.user : null;
   const token = state.status === "authenticated" ? state.token : null;
@@ -46,6 +48,7 @@ export function HubScreen() {
   function handleNavigate(v: ShellView) {
     if (v === "pdv") {
       setPdvBoot(null);
+      setPdvShellKey((k) => k + 1);
     }
     setView(v);
   }
@@ -126,7 +129,7 @@ export function HubScreen() {
           {view === "caixa" ? <CashRegisterScreen onSessionChange={() => void refreshCash()} /> : null}
           {view === "pdv" ? (
             <ModuleLockOverlay active={cashOpen === false && !!access.pdv} onGoToCash={() => setView("caixa")}>
-              <PdvScreen boot={pdvBoot} onBootConsumed={clearPdvBoot} />
+              <PdvScreen key={pdvShellKey} boot={pdvBoot} onBootConsumed={clearPdvBoot} />
             </ModuleLockOverlay>
           ) : null}
           {view === "erp" ? <ErpStockScreen /> : null}

@@ -34,6 +34,66 @@ function addCalendarDaysYmd(ymd: string, delta: number): string {
   return `${y}-${m}-${day}`;
 }
 
+function parseSpentAtBody(raw: unknown): Date | undefined {
+  if (raw === undefined || raw === null || raw === "") {
+    return new Date();
+  }
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const t = raw.trim();
+  if (DATE_ONLY.test(t)) {
+    return new Date(`${t}T12:00:00-03:00`);
+  }
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) {
+    return undefined;
+  }
+  return d;
+}
+
+function parseMoneyBody(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") {
+    return undefined;
+  }
+  const n =
+    typeof raw === "number" ? raw : typeof raw === "string" ? Number.parseFloat(raw.replace(",", ".")) : NaN;
+  if (!Number.isFinite(n)) {
+    return undefined;
+  }
+  return Math.round(n * 100) / 100;
+}
+
+async function operationalExpensesInRange(from: Date, to: Date) {
+  const rows = await prisma.financeExpense.findMany({
+    where: { spentAt: { gte: from, lte: to } },
+    orderBy: { spentAt: "desc" },
+    include: { createdBy: { select: { id: true, name: true, login: true } } },
+  });
+  const total = round2(rows.reduce((s: number, r: { amount: number }) => s + r.amount, 0));
+  return { rows, total };
+}
+
+function serializeFinanceExpense(e: {
+  id: string;
+  spentAt: Date;
+  amount: number;
+  description: string;
+  notes: string | null;
+  createdAt: Date;
+  createdBy: { id: string; name: string; login: string };
+}) {
+  return {
+    id: e.id,
+    spentAt: e.spentAt.toISOString(),
+    amount: round2(e.amount),
+    description: e.description,
+    notes: e.notes,
+    createdAt: e.createdAt.toISOString(),
+    createdBy: e.createdBy,
+  };
+}
+
 function parseRange(req: { query: Record<string, unknown> }): { from: Date; to: Date } {
   const fromRaw = typeof req.query.from === "string" ? req.query.from.trim() : "";
   const toRaw = typeof req.query.to === "string" ? req.query.to.trim() : "";
@@ -208,8 +268,9 @@ financeRouter.get("/cash-flow", async (req, res) => {
     },
   });
 
-  const rows = await Promise.all(
-    sessions.map(async (s) => {
+  const [sessionRows, opExp] = await Promise.all([
+    Promise.all(
+      sessions.map(async (s) => {
       const [sangria, suprimento, payAgg, cashSalesAgg] = await Promise.all([
         prisma.cashMovement.aggregate({
           where: { cashRegisterId: s.id, type: "SANGRIA" },
@@ -272,17 +333,29 @@ financeRouter.get("/cash-flow", async (req, res) => {
         closedBy: s.closedBy,
       };
     }),
-  );
+    ),
+    operationalExpensesInRange(from, to),
+  ]);
 
   res.json({
     filter: { from: from.toISOString(), to: to.toISOString() },
-    sessions: rows,
+    sessions: sessionRows,
+    operationalExpenses: opExp.rows.map(serializeFinanceExpense),
+    operationalExpensesTotal: opExp.total,
   });
 });
 
 /** Resumo de vendas no período (pedidos fechados) + lista analítica. */
 financeRouter.get("/sales-summary", async (req, res) => {
   const { from, to } = parseRange(req);
+
+  const opExpAgg = await prisma.financeExpense.aggregate({
+    where: { spentAt: { gte: from, lte: to } },
+    _sum: { amount: true },
+    _count: true,
+  });
+  const operationalExpensesTotal = round2(opExpAgg._sum.amount ?? 0);
+  const operationalExpenseCount = opExpAgg._count;
 
   const closedWhere = {
     status: "CLOSED" as const,
@@ -356,6 +429,8 @@ financeRouter.get("/sales-summary", async (req, res) => {
       orders: [],
       averageTicket: 0,
       topProducts,
+      operationalExpensesTotal,
+      operationalExpenseCount,
     });
     return;
   }
@@ -459,5 +534,63 @@ financeRouter.get("/sales-summary", async (req, res) => {
     orders: ordersOut,
     averageTicket,
     topProducts,
+    operationalExpensesTotal,
+    operationalExpenseCount,
   });
+});
+
+/** Lista e lançamento de despesas operacionais (módulo financeiro; não exige caixa aberto). */
+financeRouter.get("/expenses", async (req, res) => {
+  const { from, to } = parseRange(req);
+  const { rows, total } = await operationalExpensesInRange(from, to);
+  res.json({
+    filter: { from: from.toISOString(), to: to.toISOString() },
+    expenses: rows.map(serializeFinanceExpense),
+    total,
+  });
+});
+
+financeRouter.post("/expenses", async (req, res) => {
+  const amount = parseMoneyBody(req.body?.amount);
+  if (amount === undefined || amount <= 0) {
+    res.status(400).json({ error: "Informe um valor válido (> 0)." });
+    return;
+  }
+  const desc =
+    typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 200) : "";
+  if (!desc) {
+    res.status(400).json({ error: "Informe a descrição do gasto." });
+    return;
+  }
+  const notesRaw = req.body?.notes;
+  const notes =
+    typeof notesRaw === "string" && notesRaw.trim() !== "" ? notesRaw.trim().slice(0, 2000) : null;
+  const spentAt = parseSpentAtBody(req.body?.spentAt);
+  if (!spentAt) {
+    res.status(400).json({ error: "Data do gasto inválida." });
+    return;
+  }
+
+  const created = await prisma.financeExpense.create({
+    data: {
+      spentAt,
+      amount,
+      description: desc,
+      notes,
+      createdById: req.user!.sub,
+    },
+    include: { createdBy: { select: { id: true, name: true, login: true } } },
+  });
+  res.status(201).json({ expense: serializeFinanceExpense(created) });
+});
+
+financeRouter.delete("/expenses/:id", async (req, res) => {
+  const { id } = req.params;
+  const row = await prisma.financeExpense.findUnique({ where: { id } });
+  if (!row) {
+    res.status(404).json({ error: "Lançamento não encontrado." });
+    return;
+  }
+  await prisma.financeExpense.delete({ where: { id } });
+  res.status(204).end();
 });

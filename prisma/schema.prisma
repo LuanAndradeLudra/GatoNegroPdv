@@ -33,6 +33,7 @@ model User {
   ordersCreated       Order[]         @relation("OrderCreatedBy")
   ordersClosed        Order[]         @relation("OrderClosedBy")
   stockMovements      StockMovement[] @relation("StockMovementCreatedBy")
+  financeExpensesCreated FinanceExpense[] @relation("FinanceExpenseCreatedBy")
 }
 
 /// Configuração global (uma linha id = default): padrões para novos pedidos.
@@ -209,6 +210,8 @@ model OrderItem {
   product       Product            @relation(fields: [productId], references: [id])
   quantity      Float
   unitPrice     Float
+  /// Observações por linha (ex.: sem cebola) — cozinha / PDV.
+  note          String?
   kitchenStatus KitchenItemStatus?
 }
 
@@ -257,4 +260,17 @@ model CashMovement {
   createdById    String
   createdBy      User             @relation("CashMovementCreatedBy", fields: [createdById], references: [id])
   createdAt      DateTime         @default(now())
+}
+
+/// Despesa operacional (financeiro) — independente de caixa aberto; aparece nos relatórios por período.
+model FinanceExpense {
+  id          String   @id @default(cuid())
+  /// Data/hora do gasto (filtro do relatório).
+  spentAt     DateTime
+  amount      Float
+  description String
+  notes       String?
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("FinanceExpenseCreatedBy", fields: [createdById], references: [id])
 }

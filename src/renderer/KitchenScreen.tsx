@@ -1,31 +1,180 @@
-import { useCallback, useEffect, useState } from "react";
-import { apiKitchenBoard, apiKitchenSetStatus, type KitchenBoardItem } from "./api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChefHat, ClipboardList, Store } from "lucide-react";
+import {
+  apiKitchenBoard,
+  apiKitchenPickup,
+  apiKitchenSetStatus,
+  type KitchenBoardItem,
+} from "./api";
 import { useAuth } from "./AuthContext";
 import { cn } from "./lib/cn";
 import { Button } from "./ui/Button";
 
+const COL_QUEUE: KitchenBoardItem["kitchenStatus"][] = ["QUEUE", "PENDING"];
+const COL_PREPARING: KitchenBoardItem["kitchenStatus"][] = ["PREPARING"];
+const COL_READY: KitchenBoardItem["kitchenStatus"][] = ["READY"];
+
 const BOARD_COLUMNS: {
+  id: string;
   title: string;
   statuses: KitchenBoardItem["kitchenStatus"][];
-  accent: "slate" | "amber" | "emerald";
+  headerClass: string;
 }[] = [
-  { title: "Fila", statuses: ["QUEUE", "PENDING"], accent: "slate" },
-  { title: "Preparando", statuses: ["PREPARING"], accent: "amber" },
-  { title: "Pronto", statuses: ["READY"], accent: "emerald" },
+  {
+    id: "fila",
+    title: "Fila",
+    statuses: COL_QUEUE,
+    headerClass:
+      "border-b-2 border-blue-600 bg-blue-950/50 text-blue-100 dark:border-blue-500 dark:bg-blue-950/60 dark:text-blue-50",
+  },
+  {
+    id: "prep",
+    title: "Preparando",
+    statuses: COL_PREPARING,
+    headerClass:
+      "border-b-2 border-orange-500 bg-orange-950/40 text-orange-100 dark:border-orange-500 dark:bg-orange-950/50 dark:text-orange-50",
+  },
+  {
+    id: "ready",
+    title: "Pronto",
+    statuses: COL_READY,
+    headerClass:
+      "border-b-2 border-emerald-600 bg-emerald-950/40 text-emerald-100 dark:border-emerald-500 dark:bg-emerald-950/50 dark:text-emerald-50",
+  },
 ];
 
-const columnHeaderClass: Record<(typeof BOARD_COLUMNS)[number]["accent"], string> = {
-  slate: "border-slate-200 bg-slate-50/90 text-slate-800 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-100",
-  amber: "border-amber-200/80 bg-amber-50/90 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/35 dark:text-amber-100",
-  emerald:
-    "border-emerald-200/80 bg-emerald-50/90 text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100",
-};
-
-function orderLabel(kind: KitchenBoardItem["orderKind"], clientName: string | null): string {
-  if (kind === "COMANDA") {
-    return clientName?.trim() ? `Comanda · ${clientName}` : "Comanda rápida";
+/** Cores por tempo desde abertura do pedido (SLA visual). */
+function waitVisualClass(minutes: number): string {
+  const m = Math.max(0, minutes);
+  if (m <= 5) {
+    return "bg-emerald-600 text-white dark:bg-emerald-700";
   }
-  return "Balcão";
+  if (m < 15) {
+    return "bg-amber-500 text-zinc-950 dark:bg-amber-500 dark:text-zinc-950";
+  }
+  return "bg-red-600 text-white dark:bg-red-700";
+}
+
+function formatMinutesLabel(minutes: number): string {
+  const m = Math.max(0, Math.floor(minutes));
+  if (m >= 1440) {
+    const d = Math.floor(m / 1440);
+    return `${d}d`;
+  }
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const rest = m % 60;
+    return rest > 0 ? `${h}h${rest}m` : `${h}h`;
+  }
+  return `${m} min`;
+}
+
+function comandaHeadline(item: KitchenBoardItem): string {
+  if (item.orderKind === "COMANDA") {
+    const n = item.clientName?.trim();
+    return n ? n.toUpperCase() : "COMANDA";
+  }
+  return "BALCÃO";
+}
+
+function KitchenCard({
+  item,
+  canUpdate,
+  busyId,
+  onAdvance,
+  onPickup,
+}: {
+  item: KitchenBoardItem;
+  canUpdate: boolean;
+  busyId: string | null;
+  onAdvance: (item: KitchenBoardItem, next: "PREPARING" | "READY") => void;
+  onPickup: (item: KitchenBoardItem) => void;
+}) {
+  const busy = busyId === item.itemId;
+  const qtyLabel =
+    item.quantity === Math.floor(item.quantity) ? String(Math.floor(item.quantity)) : String(item.quantity);
+
+  return (
+    <article
+      className={cn(
+        "flex min-h-[140px] flex-col rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/90",
+      )}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {item.orderKind === "DIRECT" ? (
+            <Store className="h-4 w-4 shrink-0 text-slate-500 dark:text-zinc-500" aria-hidden />
+          ) : (
+            <ClipboardList className="h-4 w-4 shrink-0 text-slate-500 dark:text-zinc-500" aria-hidden />
+          )}
+          <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-500">
+            {item.orderKind === "DIRECT" ? "Balcão" : "Mesa / nome"}
+          </span>
+        </div>
+      </div>
+
+      <p className="mb-2 truncate text-lg font-bold leading-tight tracking-tight text-slate-900 dark:text-zinc-50">
+        {comandaHeadline(item)}
+      </p>
+
+      <p className="mb-2 text-[15px] font-semibold leading-snug text-slate-900 dark:text-zinc-100 sm:text-lg">
+        <span className="tabular-nums text-slate-600 dark:text-zinc-400">{qtyLabel}×</span> {item.productName}
+      </p>
+
+      {item.note ? (
+        <div className="mb-3 rounded-lg border border-red-700/80 bg-red-600 px-3 py-2 text-center text-sm font-bold uppercase leading-snug text-white shadow-inner dark:border-red-500 dark:bg-red-700">
+          {item.note}
+        </div>
+      ) : null}
+
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-zinc-800">
+        <span
+          className={cn(
+            "inline-flex min-h-[2rem] items-center rounded-lg px-2.5 py-1 text-xs font-bold tabular-nums",
+            waitVisualClass(item.minutesWaiting),
+          )}
+          title="Tempo desde a abertura do pedido"
+        >
+          {formatMinutesLabel(item.minutesWaiting)}
+        </span>
+
+        {canUpdate ? (
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {item.kitchenStatus === "QUEUE" || item.kitchenStatus === "PENDING" ? (
+              <Button
+                type="button"
+                className="!px-3 !py-1.5 !text-xs font-semibold"
+                disabled={busy}
+                onClick={() => onAdvance(item, "PREPARING")}
+              >
+                Preparar
+              </Button>
+            ) : null}
+            {item.kitchenStatus === "PREPARING" ? (
+              <Button
+                type="button"
+                className="!border-orange-600/80 !bg-orange-600 !px-3 !py-1.5 !text-xs font-semibold !text-white hover:!bg-orange-700 dark:!bg-orange-600 dark:hover:!bg-orange-500"
+                disabled={busy}
+                onClick={() => onAdvance(item, "READY")}
+              >
+                Finalizar
+              </Button>
+            ) : null}
+            {item.kitchenStatus === "READY" ? (
+              <Button
+                type="button"
+                className="!border-emerald-700 !bg-emerald-600 !px-3 !py-1.5 !text-xs font-semibold !text-white hover:!bg-emerald-700 dark:!bg-emerald-600 dark:hover:!bg-emerald-500"
+                disabled={busy}
+                onClick={() => onPickup(item)}
+              >
+                Entregar
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
 }
 
 export function KitchenScreen() {
@@ -64,6 +213,17 @@ export function KitchenScreen() {
     return () => window.clearInterval(id);
   }, [load]);
 
+  const stats = useMemo(() => {
+    const queue = items.filter((i) => COL_QUEUE.includes(i.kitchenStatus));
+    const prep = items.filter((i) => COL_PREPARING.includes(i.kitchenStatus));
+    const ready = items.filter((i) => COL_READY.includes(i.kitchenStatus));
+    const avgQueue =
+      queue.length > 0
+        ? Math.round(queue.reduce((s, i) => s + i.minutesWaiting, 0) / queue.length)
+        : null;
+    return { queue: queue.length, prep: prep.length, ready: ready.length, avgQueue };
+  }, [items]);
+
   async function advance(item: KitchenBoardItem, next: "PREPARING" | "READY") {
     if (!token || !canUpdate) {
       return;
@@ -80,6 +240,22 @@ export function KitchenScreen() {
     }
   }
 
+  async function pickup(item: KitchenBoardItem) {
+    if (!token || !canUpdate) {
+      return;
+    }
+    setBusyId(item.itemId);
+    setError(null);
+    try {
+      await apiKitchenPickup(token, item.itemId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao registrar entrega");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function itemsInColumn(statuses: KitchenBoardItem["kitchenStatus"][]): KitchenBoardItem[] {
     return items.filter((i) => statuses.includes(i.kitchenStatus));
   }
@@ -89,99 +265,78 @@ export function KitchenScreen() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-5 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-6 dark:border-zinc-800">
+    <div className="mx-auto flex min-h-full w-full max-w-[1920px] flex-col px-4 py-6 sm:px-5">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5 dark:border-zinc-800">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-500">Operação</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 dark:text-zinc-50">Cozinha</h2>
-          <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
-            Fila de preparo ·{" "}
-            {lastSync ? `Último sync ${new Date(lastSync).toLocaleTimeString("pt-BR")}` : "Carregando…"} · atualização a
-            cada 3s
+          <div className="mt-1 flex items-center gap-2">
+            <ChefHat className="h-7 w-7 text-slate-700 dark:text-zinc-300" strokeWidth={1.75} aria-hidden />
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-zinc-50">Cozinha</h2>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 dark:text-zinc-500">
+            Atualização automática a cada 3s
+            {lastSync ? ` · último sync ${new Date(lastSync).toLocaleTimeString("pt-BR")}` : ""}
           </p>
         </div>
-        <Button type="button" variant="outline" className="shrink-0 !py-2 text-xs" onClick={() => void load()} disabled={!!busyId}>
-          Atualizar
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300">
+            <span className="font-semibold text-slate-900 dark:text-zinc-100">Fila: {stats.queue}</span>
+            <span className="mx-2 text-slate-300 dark:text-zinc-600">|</span>
+            <span>Preparando: {stats.prep}</span>
+            <span className="mx-2 text-slate-300 dark:text-zinc-600">|</span>
+            <span>Prontos: {stats.ready}</span>
+            {stats.avgQueue != null ? (
+              <>
+                <span className="mx-2 text-slate-300 dark:text-zinc-600">|</span>
+                <span title="Média de minutos (pedido aberto) na fila">Tempo médio fila: {stats.avgQueue} min</span>
+              </>
+            ) : null}
+          </div>
+          <Button type="button" variant="outline" className="!py-2 !text-xs" onClick={() => void load()} disabled={!!busyId}>
+            Atualizar agora
+          </Button>
+        </div>
       </div>
 
       {error ? (
-        <p className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
           {error}
         </p>
       ) : null}
 
       {!canUpdate ? (
-        <p className="mt-6 text-sm text-slate-500 dark:text-zinc-500">Somente visualização — sem permissão para alterar status.</p>
+        <p className="mt-4 text-sm text-slate-500 dark:text-zinc-500">Somente visualização — sem permissão para alterar status.</p>
       ) : null}
 
-      <div className="mt-6 grid flex-1 grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-5 grid flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         {BOARD_COLUMNS.map((col) => (
           <section
-            key={col.title}
-            className="flex min-h-[220px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900/40 dark:shadow-none"
+            key={col.id}
+            className="flex min-h-[280px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40 dark:shadow-none"
           >
-            <h2
-              className={cn(
-                "flex items-center justify-between border-b px-3 py-2.5 text-sm font-semibold",
-                columnHeaderClass[col.accent],
-              )}
-            >
+            <h2 className={cn("flex items-center justify-between px-3 py-3 text-sm font-bold", col.headerClass)}>
               {col.title}
-              <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-slate-600 shadow-sm dark:bg-zinc-900/80 dark:text-zinc-400">
+              <span className="rounded-full bg-black/20 px-2.5 py-0.5 text-xs font-bold tabular-nums text-inherit">
                 {itemsInColumn(col.statuses).length}
               </span>
             </h2>
-            <div className="flex max-h-[calc(100vh-280px)] flex-col gap-2 overflow-auto p-2.5">
-              {itemsInColumn(col.statuses).map((item) => (
-                <article
-                  key={item.itemId}
-                  className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-800/70"
-                >
-                  <header className="mb-2 flex justify-between gap-2">
-                    <span className="text-xs text-slate-500 dark:text-zinc-500">{orderLabel(item.orderKind, item.clientName)}</span>
-                    <span
-                      className="whitespace-nowrap text-[11px] font-semibold text-amber-700 dark:text-amber-400/90"
-                      title="Tempo desde a abertura do pedido"
-                    >
-                      {item.minutesWaiting} min
-                    </span>
-                  </header>
-                  <p className="mb-2 text-sm">
-                    <strong className="text-slate-900 dark:text-zinc-100">{item.productName}</strong>
-                    <span className="ml-1.5 text-slate-500 dark:text-zinc-500">× {item.quantity}</span>
-                  </p>
-                  {canUpdate ? (
-                    <div className="flex flex-wrap gap-2">
-                      {item.kitchenStatus === "QUEUE" || item.kitchenStatus === "PENDING" ? (
-                        <Button
-                          type="button"
-                          className="!px-3 !py-1.5 text-xs"
-                          disabled={busyId === item.itemId}
-                          onClick={() => void advance(item, "PREPARING")}
-                        >
-                          Preparar
-                        </Button>
-                      ) : null}
-                      {item.kitchenStatus === "PREPARING" ? (
-                        <Button
-                          type="button"
-                          className="!px-3 !py-1.5 text-xs"
-                          disabled={busyId === item.itemId}
-                          onClick={() => void advance(item, "READY")}
-                        >
-                          Pronto
-                        </Button>
-                      ) : null}
-                      {item.kitchenStatus === "READY" ? (
-                        <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400/90">
-                          Aguardando retirada / servir
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
+            <div className="max-h-[min(68vh,820px)] overflow-y-auto p-2">
+              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                {itemsInColumn(col.statuses).map((item) => (
+                  <KitchenCard
+                    key={item.itemId}
+                    item={item}
+                    canUpdate={!!canUpdate}
+                    busyId={busyId}
+                    onAdvance={advance}
+                    onPickup={pickup}
+                  />
+                ))}
+              </div>
+              {itemsInColumn(col.statuses).length === 0 ? (
+                <p className="px-2 py-8 text-center text-sm text-slate-500 dark:text-zinc-600">Nenhum item</p>
+              ) : null}
             </div>
           </section>
         ))}
