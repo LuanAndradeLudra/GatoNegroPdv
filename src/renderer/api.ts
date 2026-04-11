@@ -477,6 +477,32 @@ export async function apiCommercialSettingsPatch(
   return data.settings;
 }
 
+export type DatabaseBackupResult = {
+  ok: true;
+  folder: string;
+  directory: string;
+  fileName: string;
+};
+
+export async function apiDatabaseBackup(token: string): Promise<DatabaseBackupResult> {
+  const res = await fetch("/api/database/backup", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseJson(res);
+}
+
+export async function apiDatabaseRestore(token: string, file: File): Promise<{ ok: true; message: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/database/restore", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  return parseJson(res);
+}
+
 export async function apiPdvProducts(token: string, orderId?: string | null): Promise<PdvProduct[]> {
   const qs = orderId ? `?orderId=${encodeURIComponent(orderId)}` : "";
   const res = await fetch(`/api/pdv/products${qs}`, { headers: authHeaders(token) });

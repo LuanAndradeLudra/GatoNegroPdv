@@ -31,6 +31,8 @@ services:
       API_PORT: "3001"
       HOST: "0.0.0.0"
       NODE_ENV: production
+    volumes:
+      - ./data/backups:/app/data/backups
     depends_on:
       db:
         condition: service_healthy

@@ -3,6 +3,8 @@ import {
   apiCommercialSettingsGet,
   apiCommercialSettingsPatch,
   apiCreatePaymentMethod,
+  apiDatabaseBackup,
+  apiDatabaseRestore,
   apiDeletePaymentMethod,
   apiListPaymentMethods,
   apiUpdatePaymentMethod,
@@ -43,8 +45,9 @@ export function PaymentMethodsScreen() {
   const canEdit =
     state.status === "authenticated" &&
     (state.user.role === "ADMIN" || state.user.role === "GERENTE");
+  const isAdmin = state.status === "authenticated" && state.user.role === "ADMIN";
 
-  const [tab, setTab] = useState<"payments" | "commercial">("payments");
+  const [tab, setTab] = useState<"payments" | "commercial" | "backup">("payments");
   const [methods, setMethods] = useState<PaymentMethodRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,6 +62,9 @@ export function PaymentMethodsScreen() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PaymentMethodKind>("DINHEIRO");
   const [feePercentStr, setFeePercentStr] = useState("");
+
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
 
   const tabBtn = (active: boolean) =>
     cn(
@@ -84,6 +90,12 @@ export function PaymentMethodsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isAdmin && tab === "backup") {
+      setTab("payments");
+    }
+  }, [isAdmin, tab]);
 
   const loadCommercial = useCallback(async () => {
     if (!token) {
@@ -238,6 +250,11 @@ export function PaymentMethodsScreen() {
         <button type="button" className={tabBtn(tab === "commercial")} onClick={() => setTab("commercial")}>
           Couvert e taxa de serviço
         </button>
+        {isAdmin ? (
+          <button type="button" className={tabBtn(tab === "backup")} onClick={() => setTab("backup")}>
+            Backup do banco
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -448,6 +465,115 @@ export function PaymentMethodsScreen() {
             </CardContent>
           </Card>
         </>
+      ) : null}
+
+      {tab === "backup" && isAdmin ? (
+        <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/40 dark:shadow-none">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Backup e restauração</h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-zinc-400">
+              Gera um dump SQL do PostgreSQL na pasta <code className="rounded bg-slate-100 px-1 text-xs dark:bg-zinc-800">data/backups</code>{" "}
+              (no servidor), com nome de pasta <span className="whitespace-nowrap">dia_mês_ano_horaminutosegundo</span> (ex.:{" "}
+              <span className="whitespace-nowrap">11_04_2026_143052</span>). A restauração substitui o conteúdo atual do banco pelo arquivo
+              escolhido (SQL gerado por este PDV ou dump custom do <span className="whitespace-nowrap">pg_restore</span>).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  if (!token) {
+                    return;
+                  }
+                  setBusy(true);
+                  setError(null);
+                  setBackupMsg(null);
+                  try {
+                    const r = await apiDatabaseBackup(token);
+                    setBackupMsg(`Backup salvo em: ${r.directory}/${r.fileName}`);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Erro no backup");
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Gerar backup agora
+            </Button>
+          </div>
+          {backupMsg ? (
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100">
+              {backupMsg}
+            </p>
+          ) : null}
+
+          <div className="border-t border-slate-200 pt-6 dark:border-zinc-700">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-zinc-200">Restaurar banco</h4>
+            <p className="mt-1 text-xs text-slate-600 dark:text-zinc-500">
+              Escolha um arquivo <code className="rounded bg-slate-100 px-1 dark:bg-zinc-800">dump.sql</code> deste sistema ou um backup no formato
+              custom do PostgreSQL. Todos os usuários conectados podem precisar fazer login de novo.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700">
+                <input
+                  type="file"
+                  className="sr-only"
+                  accept=".sql,.dump,.backup"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    setRestoreFile(f ?? null);
+                  }}
+                />
+                Selecionar arquivo
+              </label>
+              {restoreFile ? (
+                <span className="text-sm text-slate-600 dark:text-zinc-400">{restoreFile.name}</span>
+              ) : (
+                <span className="text-sm text-slate-500 dark:text-zinc-500">Nenhum arquivo</span>
+              )}
+              <Button
+                type="button"
+                variant="danger"
+                disabled={busy || !restoreFile}
+                onClick={() => {
+                  if (!token || !restoreFile) {
+                    return;
+                  }
+                  if (
+                    !window.confirm(
+                      "A restauração substitui os dados atuais do banco pelo conteúdo do arquivo. Esta ação não pode ser desfeita. Continuar?",
+                    )
+                  ) {
+                    return;
+                  }
+                  if (!window.confirm("Confirma restauração? O sistema ficará inconsistente até você recarregar a página.")) {
+                    return;
+                  }
+                  void (async () => {
+                    setBusy(true);
+                    setError(null);
+                    try {
+                      const r = await apiDatabaseRestore(token, restoreFile);
+                      setBackupMsg(r.message);
+                      setRestoreFile(null);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Erro ao restaurar");
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }}
+              >
+                Restaurar
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

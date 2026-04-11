@@ -11,6 +11,7 @@ import { paymentMethodsRouter } from "./routes/paymentMethods.js";
 import { stockRouter } from "./routes/stock.js";
 import { financeRouter } from "./routes/finance.js";
 import { commercialSettingsRouter } from "./routes/commercialSettings.js";
+import { databaseBackupRouter } from "./routes/databaseBackup.js";
 
 export function createApp(): express.Application {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp(): express.Application {
   app.use("/api/stock", stockRouter);
   app.use("/api/finance", financeRouter);
   app.use("/api/commercial-settings", commercialSettingsRouter);
+  app.use("/api/database", databaseBackupRouter);
 
   if (process.env.NODE_ENV === "production") {
     const staticDir = path.join(process.cwd(), "dist");
